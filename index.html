@@ -227,6 +227,7 @@ tr:hover td{background:var(--slate-light);}
       <div class="topbar">
         <div><h1>Lançamento Mensal</h1><div class="sub">Dados mensais por empresa e departamento</div></div>
         <div style="display:flex;gap:10px;">
+          <button class="btn danger" id="btn-lc-bulk-delete" style="display:none;" onclick="bulkDeleteLancamentos()">🗑️ Excluir selecionados</button>
           <button class="btn secondary" onclick="openImportModal()">📄 Importar relatório de absenteísmo (PDF)</button>
           <button class="btn" onclick="openLancamentoModal()">+ Novo lançamento</button>
         </div>
@@ -238,7 +239,7 @@ tr:hover td{background:var(--slate-light);}
       </div>
       <div class="card">
         <table id="tbl-lancamentos">
-          <thead><tr><th>Mês/Ano</th><th>Empresa</th><th>Depto</th><th>Func.</th><th>Admissões</th><th>Demissões</th><th>Faltas (dias)</th><th>Dias úteis</th><th>H. Extras</th><th>Valor H. Extras</th><th></th></tr></thead>
+          <thead><tr><th><input type="checkbox" id="lc-select-all" onchange="toggleAllLancamentoSelection(this.checked)"></th><th>Mês/Ano</th><th>Empresa</th><th>Depto</th><th>Func.</th><th>Admissões</th><th>Demissões</th><th>Faltas (dias)</th><th>Dias úteis</th><th>H. Extras</th><th>Valor H. Extras</th><th></th></tr></thead>
           <tbody></tbody>
         </table>
         <div class="empty" id="lancamentos-empty" style="display:none;">Nenhum lançamento cadastrado ainda.</div>
@@ -251,6 +252,11 @@ tr:hover td{background:var(--slate-light);}
         <div><h1>Absenteísmo Individual</h1><div class="sub">Registros por colaborador, importados de relatórios em PDF</div></div>
         <button class="btn secondary" onclick="showView('lancamentos');openImportModal()">📄 Importar relatório</button>
       </div>
+
+      <div class="section-title">Documentos importados</div>
+      <div id="documentos-importados-list"></div>
+
+      <div class="section-title">Registros individuais</div>
       <div class="filters">
         <select id="ai-f-empresa" onchange="renderAbsenteismoIndividual()"></select>
         <select id="ai-f-depto" onchange="renderAbsenteismoIndividual()"></select>
@@ -773,6 +779,7 @@ function filteredLancamentos(empresaId, deptoId, ano){
     return true;
   }).sort((a,b)=> a.ano-b.ano || a.mes-b.mes);
 }
+let selectedLancamentoIds = new Set();
 function renderLancamentos(){
   const empresaId = document.getElementById('lc-f-empresa').value;
   const deptoId = document.getElementById('lc-f-depto').value;
@@ -780,12 +787,15 @@ function renderLancamentos(){
   const list = filteredLancamentos(empresaId, deptoId, ano).sort((a,b)=> b.ano-a.ano || b.mes-a.mes);
   const tbody = document.querySelector('#tbl-lancamentos tbody');
   tbody.innerHTML='';
+  selectedLancamentoIds = new Set([...selectedLancamentoIds].filter(id=>list.some(l=>l.id===id)));
+  document.getElementById('lc-select-all').checked = false;
   document.getElementById('lancamentos-empty').style.display = list.length ? 'none':'block';
   list.forEach(l=>{
     const d = getDepto(l.departamentoId);
     const e = getEmpresa(l.empresaId);
     const tr = document.createElement('tr');
     tr.innerHTML = `
+      <td><input type="checkbox" class="lc-row-check" data-id="${l.id}" ${selectedLancamentoIds.has(l.id)?'checked':''} onchange="toggleLancamentoSelection('${l.id}', this.checked)"></td>
       <td>${MESES[l.mes]}/${l.ano}</td>
       <td>${e?escapeHtml(e.nome):'-'}</td>
       <td>${d?escapeHtml(d.nome):'-'}</td>
@@ -802,6 +812,34 @@ function renderLancamentos(){
       </td>`;
     tbody.appendChild(tr);
   });
+  updateLancamentoBulkDeleteUI();
+}
+function toggleLancamentoSelection(id, checked){
+  if(checked) selectedLancamentoIds.add(id); else selectedLancamentoIds.delete(id);
+  updateLancamentoBulkDeleteUI();
+}
+function toggleAllLancamentoSelection(checked){
+  document.querySelectorAll('.lc-row-check').forEach(cb=>{
+    cb.checked = checked;
+    if(checked) selectedLancamentoIds.add(cb.dataset.id); else selectedLancamentoIds.delete(cb.dataset.id);
+  });
+  updateLancamentoBulkDeleteUI();
+}
+function updateLancamentoBulkDeleteUI(){
+  const btn = document.getElementById('btn-lc-bulk-delete');
+  if(!btn) return;
+  if(selectedLancamentoIds.size>0){ btn.style.display='inline-block'; btn.textContent = `🗑️ Excluir selecionados (${selectedLancamentoIds.size})`; }
+  else btn.style.display='none';
+}
+function bulkDeleteLancamentos(){
+  const n = selectedLancamentoIds.size;
+  if(!n) return;
+  if(!confirm(`Excluir ${n} lançamento(s) selecionado(s)? Esta ação não pode ser desfeita.`)) return;
+  DATA.lancamentos = DATA.lancamentos.filter(l=>!selectedLancamentoIds.has(l.id));
+  selectedLancamentoIds.clear();
+  saveData();
+  toast('Lançamentos excluídos');
+  refreshAll();
 }
 
 /* ============ CÁLCULOS DE INDICADORES ============ */
@@ -1207,6 +1245,7 @@ function importJsonFile(event){
 
 /* ============ ABSENTEÍSMO INDIVIDUAL (view) ============ */
 function renderAbsenteismoIndividual(){
+  renderImportedDocuments();
   const empresaId = document.getElementById('ai-f-empresa').value;
   const deptoId = document.getElementById('ai-f-depto').value;
   const ano = document.getElementById('ai-f-ano').value;
@@ -1241,10 +1280,71 @@ function renderAbsenteismoIndividual(){
 }
 function deleteAbsenteismoIndividual(id){
   if(!confirm('Excluir este registro individual?')) return;
+  const r = DATA.absenteismoIndividual.find(x=>x.id===id);
   DATA.absenteismoIndividual = DATA.absenteismoIndividual.filter(r=>r.id!==id);
+  if(r) recomputeLancamentoAbsenteeismo(r.empresaId, r.departamentoId, r.ano, r.mes);
   saveData();
   toast('Registro removido');
   refreshAll();
+}
+
+/* ============ DOCUMENTOS IMPORTADOS ============ */
+function renderImportedDocuments(){
+  const container = document.getElementById('documentos-importados-list');
+  if(!container) return;
+  const grupos = {};
+  (DATA.absenteismoIndividual||[]).forEach(r=>{
+    if(!r.importId) return;
+    if(!grupos[r.importId]){
+      grupos[r.importId] = { importId: r.importId, fileName: r.fileName || 'relatório importado', importedAt: r.importedAt, count: 0, pares: new Set() };
+    }
+    grupos[r.importId].count++;
+    const emp = getEmpresa(r.empresaId);
+    const dep = getDepto(r.departamentoId);
+    grupos[r.importId].pares.add(`${emp?emp.nome:'-'} · ${dep?dep.nome:'-'} · ${MESES[r.mes]}/${r.ano}`);
+  });
+  const list = Object.values(grupos).sort((a,b)=> new Date(b.importedAt||0) - new Date(a.importedAt||0));
+  if(!list.length){
+    container.innerHTML = '<div class="card empty">Nenhum documento importado ainda. Use "Importar relatório" na tela de Lançamento Mensal.</div>';
+    return;
+  }
+  container.innerHTML = list.map(g=>`
+    <div class="card" style="margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+      <div>
+        <strong>${escapeHtml(g.fileName)}</strong>
+        <div class="help">${g.importedAt ? new Date(g.importedAt).toLocaleString('pt-BR') : ''} · ${g.count} registro(s) · ${escapeHtml(Array.from(g.pares).join(' | '))}</div>
+      </div>
+      <button class="btn small danger" onclick="deleteImportedDocument('${g.importId}')">Excluir documento</button>
+    </div>`).join('');
+}
+
+function deleteImportedDocument(importId){
+  if(!confirm('Excluir este documento importado? Todos os registros individuais desse arquivo serão removidos, e os lançamentos mensais relacionados terão os dados de horas importadas recalculados.')) return;
+  const afetados = DATA.absenteismoIndividual.filter(r=>r.importId===importId);
+  const chaves = new Set(afetados.map(r=>`${r.empresaId}|${r.departamentoId}|${r.ano}|${r.mes}`));
+  DATA.absenteismoIndividual = DATA.absenteismoIndividual.filter(r=>r.importId!==importId);
+  chaves.forEach(key=>{
+    const [empresaId, departamentoId, ano, mes] = key.split('|');
+    recomputeLancamentoAbsenteeismo(empresaId, departamentoId, parseInt(ano), parseInt(mes));
+  });
+  saveData();
+  toast('Documento removido');
+  refreshAll();
+}
+
+// recalcula (ou limpa) os campos de absenteísmo em horas de um lançamento, a partir
+// dos registros individuais que ainda restarem para aquela empresa/departamento/mês
+function recomputeLancamentoAbsenteeismo(empresaId, departamentoId, ano, mes){
+  const lanc = DATA.lancamentos.find(l=>l.empresaId===empresaId && l.departamentoId===departamentoId && l.ano===ano && l.mes===mes);
+  if(!lanc) return;
+  const restantes = (DATA.absenteismoIndividual||[]).filter(r=>r.empresaId===empresaId && r.departamentoId===departamentoId && r.ano===ano && r.mes===mes);
+  if(restantes.length){
+    lanc.horasPrevistas = restantes.reduce((s,r)=>s+r.horasPrevistas,0);
+    lanc.horasAbsenteismo = restantes.reduce((s,r)=>s+r.absTotal,0);
+  } else {
+    delete lanc.horasPrevistas;
+    delete lanc.horasAbsenteismo;
+  }
 }
 function formatHoras(dec){
   if(dec===undefined || dec===null) return '-';
@@ -1255,6 +1355,7 @@ function formatHoras(dec){
 
 /* ============ IMPORTAÇÃO DE RELATÓRIO DE ABSENTEÍSMO (PDF) ============ */
 let importPreviewGroups = [];
+let currentImportFileName = '';
 
 function openImportModal(){
   document.getElementById('import-pdf-file').value = '';
@@ -1398,6 +1499,7 @@ function fuzzyMatchDepartamento(label){
 async function handlePdfUpload(event){
   const file = event.target.files[0];
   if(!file) return;
+  currentImportFileName = file.name;
   if(typeof pdfjsLib === 'undefined'){ toast('Biblioteca de PDF não carregou. Verifique sua conexão.'); return; }
   document.getElementById('import-loading').style.display = 'block';
   try{
@@ -1516,6 +1618,9 @@ function fillImportDeptoSelect(gi){
 
 function confirmImportAbsenteeismo(){
   let count = 0;
+  const importId = uid();
+  const importedAt = new Date().toISOString();
+  const fileName = currentImportFileName || 'relatório.pdf';
   importPreviewGroups.forEach(g=>{
     if(!g.empresaId || !g.rows.length) return;
     const ano = parseInt(g.ano), mes = parseInt(g.mes);
@@ -1561,6 +1666,7 @@ function confirmImportAbsenteeismo(){
         absJustificado: r.absJustificado,
         absTotal: r.absTotal,
         percentual: r.absTotalPct,
+        importId, importedAt, fileName,
       });
       count++;
     });
