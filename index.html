@@ -161,7 +161,7 @@ tr:hover td{background:var(--slate-light);}
       </div>
 
       <div class="filters">
-        <select id="f-empresa" onchange="onFilterEmpresaChange('f-empresa','f-depto');renderDashboard()"></select>
+        <select id="f-empresa" onchange="renderDashboard()"></select>
         <select id="f-depto" onchange="renderDashboard()"></select>
         <select id="f-ano" onchange="renderDashboard()"></select>
       </div>
@@ -217,7 +217,7 @@ tr:hover td{background:var(--slate-light);}
         <button class="btn" onclick="openDeptoModal()">+ Novo departamento</button>
       </div>
       <div class="card">
-        <table id="tbl-departamentos"><thead><tr><th>Nome</th><th>Empresa</th><th></th></tr></thead><tbody></tbody></table>
+        <table id="tbl-departamentos"><thead><tr><th>Nome</th><th></th></tr></thead><tbody></tbody></table>
         <div class="empty" id="departamentos-empty" style="display:none;">Nenhum departamento cadastrado ainda.</div>
       </div>
     </div>
@@ -232,7 +232,7 @@ tr:hover td{background:var(--slate-light);}
         </div>
       </div>
       <div class="filters">
-        <select id="lc-f-empresa" onchange="onFilterEmpresaChange('lc-f-empresa','lc-f-depto');renderLancamentos()"></select>
+        <select id="lc-f-empresa" onchange="renderLancamentos()"></select>
         <select id="lc-f-depto" onchange="renderLancamentos()"></select>
         <select id="lc-f-ano" onchange="renderLancamentos()"></select>
       </div>
@@ -252,7 +252,7 @@ tr:hover td{background:var(--slate-light);}
         <button class="btn secondary" onclick="showView('lancamentos');openImportModal()">📄 Importar relatório</button>
       </div>
       <div class="filters">
-        <select id="ai-f-empresa" onchange="onFilterEmpresaChange('ai-f-empresa','ai-f-depto');renderAbsenteismoIndividual()"></select>
+        <select id="ai-f-empresa" onchange="renderAbsenteismoIndividual()"></select>
         <select id="ai-f-depto" onchange="renderAbsenteismoIndividual()"></select>
         <select id="ai-f-ano" onchange="renderAbsenteismoIndividual()"></select>
       </div>
@@ -271,7 +271,7 @@ tr:hover td{background:var(--slate-light);}
         <div><h1>Indicadores</h1><div class="sub">Fórmulas e valores calculados automaticamente</div></div>
       </div>
       <div class="filters">
-        <select id="ind-f-empresa" onchange="onFilterEmpresaChange('ind-f-empresa','ind-f-depto');renderIndicadores()"></select>
+        <select id="ind-f-empresa" onchange="renderIndicadores()"></select>
         <select id="ind-f-depto" onchange="renderIndicadores()"></select>
         <select id="ind-f-ano" onchange="renderIndicadores()"></select>
       </div>
@@ -364,8 +364,8 @@ tr:hover td{background:var(--slate-light);}
   <div class="modal">
     <h2 id="depto-modal-title">Novo departamento</h2>
     <input type="hidden" id="depto-id">
-    <div class="form-row"><label>Empresa</label><select id="depto-empresa"></select></div>
     <div class="form-row"><label>Nome do departamento</label><input id="depto-nome" placeholder="Ex: MATRIZ, TATUAPÉ, VILA MARIANA..."></div>
+    <div class="help">Departamentos são compartilhados entre todas as empresas — você escolhe a empresa no momento do lançamento mensal.</div>
     <div class="modal-actions">
       <button class="btn ghost" onclick="closeModal('modal-depto')">Cancelar</button>
       <button class="btn" onclick="saveDepto()">Salvar</button>
@@ -379,7 +379,7 @@ tr:hover td{background:var(--slate-light);}
     <h2 id="lancamento-modal-title">Novo lançamento mensal</h2>
     <input type="hidden" id="lc-id">
     <div class="form-row-2">
-      <div class="form-row"><label>Empresa</label><select id="lc-empresa" onchange="fillDeptoOptions('lc-empresa','lc-depto')"></select></div>
+      <div class="form-row"><label>Empresa</label><select id="lc-empresa"></select></div>
       <div class="form-row"><label>Departamento</label><select id="lc-depto"></select></div>
     </div>
     <div class="form-row-2">
@@ -446,10 +446,42 @@ function loadData(){
     if(raw){
       const parsed = JSON.parse(raw);
       if(!parsed.absenteismoIndividual) parsed.absenteismoIndividual = [];
+      migrateDepartamentosCompartilhados(parsed);
       return parsed;
     }
   }catch(e){ console.error('Erro ao carregar dados', e); }
   return { empresas: [], departamentos: [], lancamentos: [], absenteismoIndividual: [] };
+}
+
+// Migração: versões antigas vinculavam cada departamento a UMA empresa.
+// Agora departamentos são compartilhados entre todas as empresas, e cada
+// lançamento/registro carrega sua própria empresaId diretamente.
+function migrateDepartamentosCompartilhados(data){
+  const temFormatoAntigo = (data.departamentos||[]).some(d=>d.empresaId);
+  if(!temFormatoAntigo) return;
+  const norm = s => (s||'').trim().toUpperCase();
+  const porNome = {}; // nome normalizado -> novo departamento global
+  const antigoParaNovo = {}; // id antigo -> {novoId, empresaId}
+  (data.departamentos||[]).forEach(d=>{
+    const key = norm(d.nome);
+    if(!porNome[key]) porNome[key] = { id: uid(), nome: d.nome };
+    antigoParaNovo[d.id] = { novoId: porNome[key].id, empresaId: d.empresaId };
+  });
+  data.departamentos = Object.values(porNome);
+  (data.lancamentos||[]).forEach(l=>{
+    const map = antigoParaNovo[l.departamentoId];
+    if(map){
+      if(!l.empresaId) l.empresaId = map.empresaId;
+      l.departamentoId = map.novoId;
+    }
+  });
+  (data.absenteismoIndividual||[]).forEach(r=>{
+    const map = antigoParaNovo[r.departamentoId];
+    if(map){
+      if(!r.empresaId) r.empresaId = map.empresaId;
+      r.departamentoId = map.novoId;
+    }
+  });
 }
 let DATA = loadData();
 
@@ -484,7 +516,6 @@ function openModal(id){ document.getElementById(id).classList.add('active'); }
 /* ============ HELPERS DE DADOS ============ */
 function getEmpresa(id){ return DATA.empresas.find(e=>e.id===id); }
 function getDepto(id){ return DATA.departamentos.find(d=>d.id===id); }
-function deptosDaEmpresa(empresaId){ return DATA.departamentos.filter(d=>d.empresaId===empresaId); }
 const MESES = ['','Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const MESES_EXT = ['','Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 
@@ -509,8 +540,8 @@ function fillEmpresaSelect(selectId, withAllOption){
   });
   if(current && [...sel.options].some(o=>o.value===current)) sel.value = current;
 }
-function fillDeptoOptions(empresaSelectId, deptoSelectId, withAllOption){
-  const empresaId = document.getElementById(empresaSelectId).value;
+/* departamentos são compartilhados entre todas as empresas — lista sempre completa */
+function fillDeptoOptions(deptoSelectId, withAllOption){
   const sel = document.getElementById(deptoSelectId);
   const current = sel.value;
   sel.innerHTML='';
@@ -518,8 +549,7 @@ function fillDeptoOptions(empresaSelectId, deptoSelectId, withAllOption){
     const opt = document.createElement('option'); opt.value=''; opt.textContent='Todos os departamentos';
     sel.appendChild(opt);
   }
-  const list = empresaId ? deptosDaEmpresa(empresaId) : DATA.departamentos;
-  list.forEach(d=>{
+  DATA.departamentos.forEach(d=>{
     const opt = document.createElement('option'); opt.value=d.id; opt.textContent=d.nome;
     sel.appendChild(opt);
   });
@@ -535,14 +565,11 @@ function fillAnoSelect(selectId){
   });
   if(current && [...sel.options].some(o=>o.value===current)) sel.value = current;
 }
-function onFilterEmpresaChange(empresaSelectId, deptoSelectId){
-  fillDeptoOptions(empresaSelectId, deptoSelectId, true);
-}
 
 function setupFilterBars(){
   ['f','lc-f','ind-f','ai-f'].forEach(prefix=>{
     fillEmpresaSelect(prefix+'-empresa', true);
-    fillDeptoOptions(prefix+'-empresa', prefix+'-depto', true);
+    fillDeptoOptions(prefix+'-depto', true);
     fillAnoSelect(prefix+'-ano');
   });
 }
@@ -590,11 +617,10 @@ function saveEmpresa(){
   refreshAll();
 }
 function deleteEmpresa(id){
-  if(!confirm('Excluir esta empresa? Departamentos e lançamentos vinculados também serão removidos.')) return;
-  const deptoIds = deptosDaEmpresa(id).map(d=>d.id);
+  if(!confirm('Excluir esta empresa? Os lançamentos e registros de absenteísmo vinculados a ela também serão removidos. Os departamentos (compartilhados) permanecem.')) return;
   DATA.empresas = DATA.empresas.filter(e=>e.id!==id);
-  DATA.departamentos = DATA.departamentos.filter(d=>d.empresaId!==id);
-  DATA.lancamentos = DATA.lancamentos.filter(l=>!deptoIds.includes(l.departamentoId));
+  DATA.lancamentos = DATA.lancamentos.filter(l=>l.empresaId!==id);
+  DATA.absenteismoIndividual = (DATA.absenteismoIndividual||[]).filter(r=>r.empresaId!==id);
   saveData();
   toast('Empresa removida');
   refreshAll();
@@ -624,19 +650,15 @@ function renderEmpresas(){
 function openDeptoModal(id){
   document.getElementById('depto-modal-title').textContent = id ? 'Editar departamento' : 'Novo departamento';
   document.getElementById('depto-id').value = id || '';
-  fillEmpresaSelect('depto-empresa', false);
   const d = id ? getDepto(id) : null;
   document.getElementById('depto-nome').value = d ? d.nome : '';
-  if(d) document.getElementById('depto-empresa').value = d.empresaId;
-  if(DATA.empresas.length===0){ toast('Cadastre uma empresa antes'); return; }
   openModal('modal-depto');
 }
 function saveDepto(){
   const id = document.getElementById('depto-id').value || uid();
   const nome = document.getElementById('depto-nome').value.trim();
-  const empresaId = document.getElementById('depto-empresa').value;
-  if(!nome || !empresaId){ toast('Preencha empresa e nome do departamento'); return; }
-  const obj = { id, nome, empresaId };
+  if(!nome){ toast('Informe o nome do departamento'); return; }
+  const obj = { id, nome };
   const idx = DATA.departamentos.findIndex(d=>d.id===id);
   if(idx>=0) DATA.departamentos[idx]=obj; else DATA.departamentos.push(obj);
   saveData();
@@ -645,9 +667,10 @@ function saveDepto(){
   refreshAll();
 }
 function deleteDepto(id){
-  if(!confirm('Excluir este departamento? Lançamentos vinculados também serão removidos.')) return;
+  if(!confirm('Excluir este departamento? Ele será removido para todas as empresas, e os lançamentos vinculados também serão apagados.')) return;
   DATA.departamentos = DATA.departamentos.filter(d=>d.id!==id);
   DATA.lancamentos = DATA.lancamentos.filter(l=>l.departamentoId!==id);
+  DATA.absenteismoIndividual = (DATA.absenteismoIndividual||[]).filter(r=>r.departamentoId!==id);
   saveData();
   toast('Departamento removido');
   refreshAll();
@@ -657,11 +680,9 @@ function renderDepartamentos(){
   tbody.innerHTML='';
   document.getElementById('departamentos-empty').style.display = DATA.departamentos.length ? 'none':'block';
   DATA.departamentos.forEach(d=>{
-    const emp = getEmpresa(d.empresaId);
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${escapeHtml(d.nome)}</td>
-      <td>${emp? escapeHtml(emp.nome) : '<em>empresa removida</em>'}</td>
       <td class="actions-cell">
         <button class="btn small ghost" onclick="openDeptoModal('${d.id}')">Editar</button>
         <button class="btn small danger" onclick="deleteDepto('${d.id}')">Excluir</button>
@@ -675,12 +696,12 @@ function openLancamentoModal(id){
   document.getElementById('lancamento-modal-title').textContent = id ? 'Editar lançamento' : 'Novo lançamento mensal';
   document.getElementById('lc-id').value = id || '';
   fillEmpresaSelect('lc-empresa', false);
+  fillDeptoOptions('lc-depto', false);
   if(DATA.empresas.length===0){ toast('Cadastre uma empresa antes'); return; }
-  fillDeptoOptions('lc-empresa','lc-depto', false);
+  if(DATA.departamentos.length===0){ toast('Cadastre um departamento antes'); return; }
   const l = id ? DATA.lancamentos.find(x=>x.id===id) : null;
   if(l){
-    document.getElementById('lc-empresa').value = getDepto(l.departamentoId)?.empresaId || '';
-    fillDeptoOptions('lc-empresa','lc-depto', false);
+    document.getElementById('lc-empresa').value = l.empresaId || '';
     document.getElementById('lc-depto').value = l.departamentoId;
     document.getElementById('lc-ano').value = l.ano;
     document.getElementById('lc-mes').value = l.mes;
@@ -708,15 +729,16 @@ function openLancamentoModal(id){
 }
 function saveLancamento(){
   const id = document.getElementById('lc-id').value || uid();
+  const empresaId = document.getElementById('lc-empresa').value;
   const departamentoId = document.getElementById('lc-depto').value;
   const ano = parseInt(document.getElementById('lc-ano').value);
   const mes = parseInt(document.getElementById('lc-mes').value);
   const funcionarios = parseFloat(document.getElementById('lc-funcionarios').value)||0;
-  if(!departamentoId){ toast('Selecione empresa e departamento'); return; }
+  if(!empresaId || !departamentoId){ toast('Selecione empresa e departamento'); return; }
   if(!funcionarios){ toast('Informe a quantidade de funcionários'); return; }
   const existing = DATA.lancamentos.find(l=>l.id===id);
   const obj = {
-    id, departamentoId, ano, mes, funcionarios,
+    id, empresaId, departamentoId, ano, mes, funcionarios,
     diasUteis: parseFloat(document.getElementById('lc-diasuteis').value)||0,
     admissoes: parseFloat(document.getElementById('lc-admissoes').value)||0,
     demissoes: parseFloat(document.getElementById('lc-demissoes').value)||0,
@@ -726,8 +748,8 @@ function saveLancamento(){
   };
   // preserva dados de absenteísmo em horas vindos de importação de PDF (não editáveis neste formulário)
   if(existing && existing.horasPrevistas){ obj.horasPrevistas = existing.horasPrevistas; obj.horasAbsenteismo = existing.horasAbsenteismo; }
-  const dupe = DATA.lancamentos.find(l=>l.id!==id && l.departamentoId===departamentoId && l.ano===ano && l.mes===mes);
-  if(dupe && !confirm('Já existe um lançamento para este departamento neste mês/ano. Deseja sobrescrevê-lo?')) return;
+  const dupe = DATA.lancamentos.find(l=>l.id!==id && l.empresaId===empresaId && l.departamentoId===departamentoId && l.ano===ano && l.mes===mes);
+  if(dupe && !confirm('Já existe um lançamento para esta empresa/departamento neste mês/ano. Deseja sobrescrevê-lo?')) return;
   if(dupe){ DATA.lancamentos = DATA.lancamentos.filter(l=>l.id!==dupe.id); }
   const idx = DATA.lancamentos.findIndex(l=>l.id===id);
   if(idx>=0) DATA.lancamentos[idx]=obj; else DATA.lancamentos.push(obj);
@@ -745,9 +767,7 @@ function deleteLancamento(id){
 }
 function filteredLancamentos(empresaId, deptoId, ano){
   return DATA.lancamentos.filter(l=>{
-    const d = getDepto(l.departamentoId);
-    if(!d) return false;
-    if(empresaId && d.empresaId!==empresaId) return false;
+    if(empresaId && l.empresaId!==empresaId) return false;
     if(deptoId && l.departamentoId!==deptoId) return false;
     if(ano && l.ano!==parseInt(ano)) return false;
     return true;
@@ -763,7 +783,7 @@ function renderLancamentos(){
   document.getElementById('lancamentos-empty').style.display = list.length ? 'none':'block';
   list.forEach(l=>{
     const d = getDepto(l.departamentoId);
-    const e = d ? getEmpresa(d.empresaId) : null;
+    const e = getEmpresa(l.empresaId);
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${MESES[l.mes]}/${l.ano}</td>
@@ -786,7 +806,7 @@ function renderLancamentos(){
 
 /* ============ CÁLCULOS DE INDICADORES ============ */
 // Turnover mensal (%) = ((admissões + demissões)/2) / headcount médio * 100
-// headcount médio = média entre o headcount do mês e do mês anterior (mesmo depto), se existir
+// headcount médio = média entre o headcount do mês e do mês anterior (mesma empresa+depto), se existir
 function turnoverMensal(l, listaOrdenada){
   const idx = listaOrdenada.findIndex(x=>x.id===l.id);
   const anterior = idx>0 ? listaOrdenada[idx-1] : null;
@@ -891,16 +911,17 @@ function renderDashboard(){
 }
 
 function avgTurnoverForMonth(doAnoLancamentos, mes, ano){
-  // turnover médio (não ponderado) entre os departamentos que têm lançamento naquele mês
+  // turnover médio (não ponderado) entre os pares empresa+departamento que têm lançamento naquele mês
   const doMes = doAnoLancamentos.filter(l=>l.mes===mes);
   if(!doMes.length) return 0;
-  const porDepto = {};
-  doMes.forEach(l=>{ if(!porDepto[l.departamentoId]) porDepto[l.departamentoId]=[]; porDepto[l.departamentoId].push(l); });
+  const porGrupo = {};
+  doMes.forEach(l=>{ const key=l.empresaId+'|'+l.departamentoId; if(!porGrupo[key]) porGrupo[key]=[]; porGrupo[key].push(l); });
   let total=0, n=0;
-  Object.keys(porDepto).forEach(dId=>{
-    const listaDepto = DATA.lancamentos.filter(l=>l.departamentoId===dId).sort((a,b)=>a.ano-b.ano||a.mes-b.mes);
-    const l = porDepto[dId].find(x=>x.ano===parseInt(ano)||!ano);
-    if(l){ total += turnoverMensal(l, listaDepto); n++; }
+  Object.keys(porGrupo).forEach(key=>{
+    const [empId, depId] = key.split('|');
+    const listaGrupo = DATA.lancamentos.filter(l=>l.empresaId===empId && l.departamentoId===depId).sort((a,b)=>a.ano-b.ano||a.mes-b.mes);
+    const l = porGrupo[key].find(x=>x.ano===parseInt(ano)||!ano);
+    if(l){ total += turnoverMensal(l, listaGrupo); n++; }
   });
   return n? total/n : 0;
 }
@@ -936,10 +957,18 @@ function drawBarChart(canvasId, labels, data, label, color){
 function renderRanking(ano){
   const tbody = document.querySelector('#tbl-ranking tbody');
   tbody.innerHTML='';
-  const rows = DATA.departamentos.map(d=>{
-    const lancsDepto = filteredLancamentos(null, d.id, ano).sort((a,b)=>a.mes-b.mes);
-    if(!lancsDepto.length) return null;
-    const emp = getEmpresa(d.empresaId);
+  const pares = {}; // 'empresaId|departamentoId' -> lançamentos[]
+  filteredLancamentos(null, null, ano).forEach(l=>{
+    const key = l.empresaId+'|'+l.departamentoId;
+    if(!pares[key]) pares[key] = [];
+    pares[key].push(l);
+  });
+  const rows = Object.entries(pares).map(([key, lancsDepto])=>{
+    lancsDepto.sort((a,b)=>a.mes-b.mes);
+    const [empresaId, departamentoId] = key.split('|');
+    const d = getDepto(departamentoId);
+    const emp = getEmpresa(empresaId);
+    if(!d) return null;
     const turnoverAno = lancsDepto.reduce((s,l)=>s+turnoverMensal(l, lancsDepto),0)/lancsDepto.length;
     const absAno = lancsDepto.reduce((s,l)=>s+absenteismoMensal(l),0)/lancsDepto.length;
     const ultimoHc = lancsDepto[lancsDepto.length-1].funcionarios;
@@ -960,7 +989,7 @@ function renderRecentes(){
   if(!list.length){ tbody.innerHTML = '<tr><td colspan="7" class="empty">Sem lançamentos</td></tr>'; return; }
   list.forEach(l=>{
     const d = getDepto(l.departamentoId);
-    const e = d? getEmpresa(d.empresaId):null;
+    const e = getEmpresa(l.empresaId);
     const tr = document.createElement('tr');
     tr.innerHTML = `<td>${MESES[l.mes]}/${l.ano}</td><td>${e?escapeHtml(e.nome):'-'}</td><td>${d?escapeHtml(d.nome):'-'}</td><td>${l.funcionarios}</td><td>${l.admissoes}</td><td>${l.demissoes}</td><td>${l.horasExtras}h</td>`;
     tbody.appendChild(tr);
@@ -983,7 +1012,7 @@ function renderInicio(){
   if(!list.length){ tbody.innerHTML = '<tr><td colspan="7" class="empty">Nenhum lançamento ainda. Cadastre uma empresa e um departamento para começar.</td></tr>'; }
   list.forEach(l=>{
     const d = getDepto(l.departamentoId);
-    const e = d? getEmpresa(d.empresaId):null;
+    const e = getEmpresa(l.empresaId);
     const tr = document.createElement('tr');
     tr.innerHTML = `<td>${MESES[l.mes]}/${l.ano}</td><td>${e?escapeHtml(e.nome):'-'}</td><td>${d?escapeHtml(d.nome):'-'}</td><td>${l.funcionarios}</td><td>${l.admissoes}</td><td>${l.demissoes}</td><td>${l.horasExtras}h</td>`;
     tbody.appendChild(tr);
@@ -1138,6 +1167,8 @@ async function restoreFromDrive(){
       headers:{ Authorization:'Bearer '+gdAccessToken }
     });
     const json = await res.json();
+    if(!json.absenteismoIndividual) json.absenteismoIndividual = [];
+    migrateDepartamentosCompartilhados(json);
     DATA = json;
     saveData();
     toast('Dados restaurados do Google Drive');
@@ -1163,6 +1194,8 @@ function importJsonFile(event){
       const json = JSON.parse(reader.result);
       if(!json.empresas || !json.departamentos || !json.lancamentos) throw new Error('formato inválido');
       if(!confirm('Isso substituirá todos os dados atuais pelos dados do arquivo. Continuar?')) return;
+      if(!json.absenteismoIndividual) json.absenteismoIndividual = [];
+      migrateDepartamentosCompartilhados(json);
       DATA = json;
       saveData();
       toast('Dados importados');
@@ -1178,9 +1211,7 @@ function renderAbsenteismoIndividual(){
   const deptoId = document.getElementById('ai-f-depto').value;
   const ano = document.getElementById('ai-f-ano').value;
   const list = (DATA.absenteismoIndividual||[]).filter(r=>{
-    const d = getDepto(r.departamentoId);
-    if(!d) return false;
-    if(empresaId && d.empresaId!==empresaId) return false;
+    if(empresaId && r.empresaId!==empresaId) return false;
     if(deptoId && r.departamentoId!==deptoId) return false;
     if(ano && r.ano!==parseInt(ano)) return false;
     return true;
@@ -1191,7 +1222,7 @@ function renderAbsenteismoIndividual(){
   document.getElementById('absenteismo-individual-empty').style.display = list.length ? 'none':'block';
   list.forEach(r=>{
     const d = getDepto(r.departamentoId);
-    const e = d? getEmpresa(d.empresaId):null;
+    const e = getEmpresa(r.empresaId);
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${MESES[r.mes]}/${r.ano}</td>
@@ -1336,6 +1367,20 @@ function parseAbsenteeismoLines(lines){
   return result;
 }
 
+// tenta casar o rótulo do "Empregador" do PDF com uma empresa já cadastrada
+function fuzzyMatchEmpresa(label){
+  const norm = s => s.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Z0-9]/g,'');
+  const target = norm(label);
+  let best = null;
+  DATA.empresas.forEach(e=>{
+    const en = norm(e.nome);
+    if(target.includes(en) || en.includes(target)){
+      if(!best || en.length>norm(best.nome).length) best = e;
+    }
+  });
+  return best;
+}
+
 // tenta casar o rótulo do "Empregador" do PDF com um departamento já cadastrado
 function fuzzyMatchDepartamento(label){
   const norm = s => s.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Z0-9]/g,'');
@@ -1372,8 +1417,10 @@ async function handlePdfUpload(event){
       return;
     }
     importPreviewGroups = groups.map(g=>{
-      const match = fuzzyMatchDepartamento(g.label);
-      return { ...g, departamentoId: match ? match.id : '' };
+      const empMatch = fuzzyMatchEmpresa(g.label);
+      const empresaId = empMatch ? empMatch.id : '';
+      const deptoMatch = fuzzyMatchDepartamento(g.label);
+      return { ...g, empresaId, departamentoId: deptoMatch ? deptoMatch.id : '' };
     });
     renderImportPreview();
   }catch(e){
@@ -1408,7 +1455,7 @@ function renderImportPreview(){
   document.getElementById('btn-confirm-import').style.display = 'inline-block';
   const totalColabs = importPreviewGroups.reduce((s,g)=>s+g.rows.length,0);
   document.getElementById('import-summary').textContent =
-    `${importPreviewGroups.length} unidade(s) encontrada(s), ${totalColabs} colaborador(es) no total. Confira o mapeamento de departamento e o mês/ano de cada unidade antes de confirmar.`;
+    `${importPreviewGroups.length} unidade(s) encontrada(s), ${totalColabs} colaborador(es) no total. Selecione a empresa de cada unidade (o departamento é opcional — se não escolher um, criamos automaticamente com o nome identificado no PDF).`;
 
   const container = document.getElementById('import-groups');
   container.innerHTML = '';
@@ -1419,50 +1466,82 @@ function renderImportPreview(){
     const div = document.createElement('div');
     div.className = 'card';
     div.style.marginBottom = '12px';
-    const deptoOptions = DATA.departamentos.map(d=>{
-      const emp = getEmpresa(d.empresaId);
-      return `<option value="${d.id}" ${g.departamentoId===d.id?'selected':''}>${escapeHtml(d.nome)} (${emp?escapeHtml(emp.nome):'-'})</option>`;
-    }).join('');
+    div.id = `import-group-${gi}`;
+    const empresaOptions = DATA.empresas.map(e=>
+      `<option value="${e.id}" ${g.empresaId===e.id?'selected':''}>${escapeHtml(e.nome)}</option>`
+    ).join('');
     div.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">
         <div>
           <strong>${escapeHtml(g.label)}</strong>
           <div class="help">${g.rows.length} colaborador(es) · absenteísmo total calculado: ${pct.toFixed(1)}%</div>
         </div>
-        <div class="form-row-2" style="min-width:320px;">
-          <div class="form-row"><label>Departamento no sistema</label>
-            <select onchange="importPreviewGroups[${gi}].departamentoId=this.value">
-              <option value="">— não importar esta unidade —</option>
-              ${deptoOptions}
+        <div class="form-row-2" style="min-width:340px;">
+          <div class="form-row"><label>Empresa</label>
+            <select id="import-empresa-${gi}" onchange="onImportEmpresaChange(${gi}, this.value)">
+              <option value="">— selecione —</option>
+              ${empresaOptions}
             </select>
           </div>
-          <div class="form-row-2" style="grid-template-columns:1fr 1fr;">
+          <div class="form-row"><label>Departamento (opcional)</label>
+            <select id="import-depto-${gi}" onchange="importPreviewGroups[${gi}].departamentoId=this.value"></select>
+          </div>
+          <div class="form-row-2" style="grid-template-columns:1fr 1fr;grid-column:1/-1;">
             <div><label>Mês</label><input type="number" min="1" max="12" value="${g.mes||new Date().getMonth()+1}" onchange="importPreviewGroups[${gi}].mes=parseInt(this.value)"></div>
             <div><label>Ano</label><input type="number" value="${g.ano||new Date().getFullYear()}" onchange="importPreviewGroups[${gi}].ano=parseInt(this.value)"></div>
           </div>
         </div>
       </div>`;
     container.appendChild(div);
+    fillImportDeptoSelect(gi);
   });
-  if(!DATA.departamentos.length){
-    container.innerHTML = '<p class="help">Você ainda não tem departamentos cadastrados. Cadastre ao menos um departamento antes de importar, para poder vincular os dados.</p>';
+  if(!DATA.empresas.length){
+    container.innerHTML = '<p class="help">Você ainda não tem empresas cadastradas. Cadastre ao menos uma empresa antes de importar.</p>';
     document.getElementById('btn-confirm-import').style.display = 'none';
   }
+}
+
+function onImportEmpresaChange(gi, empresaId){
+  importPreviewGroups[gi].empresaId = empresaId;
+  fillImportDeptoSelect(gi);
+}
+
+function fillImportDeptoSelect(gi){
+  const g = importPreviewGroups[gi];
+  const sel = document.getElementById(`import-depto-${gi}`);
+  if(!sel) return;
+  const options = DATA.departamentos.map(d=>`<option value="${d.id}" ${g.departamentoId===d.id?'selected':''}>${escapeHtml(d.nome)}</option>`).join('');
+  sel.innerHTML = `<option value="">— criar automaticamente (${escapeHtml(g.label)}) —</option>${options}`;
 }
 
 function confirmImportAbsenteeismo(){
   let count = 0;
   importPreviewGroups.forEach(g=>{
-    if(!g.departamentoId || !g.rows.length) return;
+    if(!g.empresaId || !g.rows.length) return;
     const ano = parseInt(g.ano), mes = parseInt(g.mes);
     if(!ano || !mes) return;
+
+    let departamentoId = g.departamentoId;
+    if(!departamentoId){
+      // sem departamento escolhido: reaproveita um já existente (compartilhado entre empresas)
+      // com o mesmo nome, ou cria um novo automaticamente com o rótulo identificado no PDF
+      const existenteMesmoNome = DATA.departamentos.find(d=>d.nome.trim().toLowerCase()===g.label.trim().toLowerCase());
+      if(existenteMesmoNome){
+        departamentoId = existenteMesmoNome.id;
+      } else {
+        const novoDepto = { id: uid(), nome: g.label };
+        DATA.departamentos.push(novoDepto);
+        departamentoId = novoDepto.id;
+      }
+    }
+
     const sumPrev = g.rows.reduce((s,r)=>s+r.horasPrevistas,0);
     const sumAbsTotal = g.rows.reduce((s,r)=>s+r.absTotal,0);
     const sumHE = g.rows.reduce((s,r)=>s+r.horasExtras,0);
 
-    let lanc = DATA.lancamentos.find(l=>l.departamentoId===g.departamentoId && l.ano===ano && l.mes===mes);
+    let lanc = DATA.lancamentos.find(l=>l.empresaId===g.empresaId && l.departamentoId===departamentoId && l.ano===ano && l.mes===mes);
     if(!lanc){
-      lanc = { id: uid(), departamentoId: g.departamentoId, ano, mes, funcionarios: g.rows.length, diasUteis: 0, admissoes: 0, demissoes: 0, faltas: 0, horasExtras: 0, horasExtrasValor: 0 };
+      lanc = { id: uid(), empresaId: g.empresaId, departamentoId, ano, mes, funcionarios: g.rows.length, diasUteis: 0, admissoes: 0, demissoes: 0, faltas: 0, horasExtras: 0, horasExtrasValor: 0 };
       DATA.lancamentos.push(lanc);
     }
     lanc.horasPrevistas = sumPrev;
@@ -1470,11 +1549,11 @@ function confirmImportAbsenteeismo(){
     if(!lanc.funcionarios) lanc.funcionarios = g.rows.length;
     if(!lanc.horasExtras) lanc.horasExtras = sumHE;
 
-    // remove registros individuais anteriores do mesmo departamento/período antes de reimportar
-    DATA.absenteismoIndividual = DATA.absenteismoIndividual.filter(r=>!(r.departamentoId===g.departamentoId && r.ano===ano && r.mes===mes));
+    // remove registros individuais anteriores da mesma empresa/departamento/período antes de reimportar
+    DATA.absenteismoIndividual = DATA.absenteismoIndividual.filter(r=>!(r.empresaId===g.empresaId && r.departamentoId===departamentoId && r.ano===ano && r.mes===mes));
     g.rows.forEach(r=>{
       DATA.absenteismoIndividual.push({
-        id: uid(), departamentoId: g.departamentoId, ano, mes,
+        id: uid(), empresaId: g.empresaId, departamentoId, ano, mes,
         colaborador: r.colaborador,
         horasPrevistas: r.horasPrevistas,
         horasTrabalhadas: r.horasTrabalhadas,
@@ -1489,7 +1568,7 @@ function confirmImportAbsenteeismo(){
   saveData();
   closeModal('modal-import-abs');
   if(count>0){ toast(`${count} registro(s) importado(s)`); showView('absenteismo'); }
-  else toast('Nenhum registro importado — verifique o mapeamento de departamentos');
+  else toast('Nenhum registro importado — selecione a empresa de cada unidade');
   refreshAll();
 }
 
