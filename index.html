@@ -412,6 +412,8 @@ tr:hover td{background:var(--slate-light);}
       <div class="form-row"><label>Horas extras (total, horas)</label><input type="number" id="lc-he" min="0" value="0" step="0.5"></div>
     </div>
     <div class="form-row"><label>Valor pago em horas extras (R$)</label><input type="number" id="lc-he-valor" min="0" value="0" step="0.01"></div>
+    <div class="form-row"><label>Percentual de absenteísmo (%) — opcional</label><input type="number" id="lc-abs-manual" min="0" step="0.01" placeholder="Deixe em branco para calcular automaticamente"></div>
+    <div class="help">Se preenchido, esse percentual substitui o cálculo automático (faltas ÷ dias úteis, ou dados importados de PDF) para este lançamento.</div>
     <div class="help" id="lc-import-note" style="display:none;">Este lançamento contém dados de absenteísmo importados de um relatório em PDF (horas previstas/horas de afastamento). Editar aqui não altera os registros individuais importados.</div>
     <div class="modal-actions">
       <button class="btn ghost" onclick="closeModal('modal-lancamento')">Cancelar</button>
@@ -718,6 +720,7 @@ function openLancamentoModal(id){
     document.getElementById('lc-faltas').value = l.faltas;
     document.getElementById('lc-he').value = l.horasExtras;
     document.getElementById('lc-he-valor').value = l.horasExtrasValor || 0;
+    document.getElementById('lc-abs-manual').value = (l.absenteismoManual!==undefined && l.absenteismoManual!==null) ? l.absenteismoManual : '';
     document.getElementById('lc-import-note').style.display = l.horasPrevistas ? 'block' : 'none';
   } else {
     document.getElementById('lc-ano').value = new Date().getFullYear();
@@ -729,6 +732,7 @@ function openLancamentoModal(id){
     document.getElementById('lc-faltas').value = 0;
     document.getElementById('lc-he').value = 0;
     document.getElementById('lc-he-valor').value = 0;
+    document.getElementById('lc-abs-manual').value = '';
     document.getElementById('lc-import-note').style.display = 'none';
   }
   openModal('modal-lancamento');
@@ -743,6 +747,7 @@ function saveLancamento(){
   if(!empresaId || !departamentoId){ toast('Selecione empresa e departamento'); return; }
   if(!funcionarios){ toast('Informe a quantidade de funcionários'); return; }
   const existing = DATA.lancamentos.find(l=>l.id===id);
+  const absManualRaw = document.getElementById('lc-abs-manual').value;
   const obj = {
     id, empresaId, departamentoId, ano, mes, funcionarios,
     diasUteis: parseFloat(document.getElementById('lc-diasuteis').value)||0,
@@ -752,6 +757,7 @@ function saveLancamento(){
     horasExtras: parseFloat(document.getElementById('lc-he').value)||0,
     horasExtrasValor: parseFloat(document.getElementById('lc-he-valor').value)||0,
   };
+  if(absManualRaw !== ''){ obj.absenteismoManual = parseFloat(absManualRaw)||0; }
   // preserva dados de absenteísmo em horas vindos de importação de PDF (não editáveis neste formulário)
   if(existing && existing.horasPrevistas){ obj.horasPrevistas = existing.horasPrevistas; obj.horasAbsenteismo = existing.horasAbsenteismo; }
   const dupe = DATA.lancamentos.find(l=>l.id!==id && l.empresaId===empresaId && l.departamentoId===departamentoId && l.ano===ano && l.mes===mes);
@@ -802,7 +808,7 @@ function renderLancamentos(){
       <td>${l.funcionarios}</td>
       <td>${l.admissoes}</td>
       <td>${l.demissoes}</td>
-      <td>${l.faltas}</td>
+      <td>${l.faltas}${(l.absenteismoManual!==undefined && l.absenteismoManual!==null)?` <span class="pill">${l.absenteismoManual}% manual</span>`:''}</td>
       <td>${l.diasUteis}</td>
       <td>${l.horasExtras}${l.horasPrevistas?' <span class="pill">PDF</span>':''}</td>
       <td>${(l.horasExtrasValor||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}</td>
@@ -853,8 +859,10 @@ function turnoverMensal(l, listaOrdenada){
   return ((l.admissoes + l.demissoes)/2) / hcMedio * 100;
 }
 function absenteismoMensal(l){
+  if(l.absenteismoManual !== undefined && l.absenteismoManual !== null){
+    return parseFloat(l.absenteismoManual) || 0;
+  }
   if(l.horasPrevistas){
-    if(!l.horasPrevistas) return 0;
     return (l.horasAbsenteismo / l.horasPrevistas) * 100;
   }
   const possiveis = l.diasUteis * l.funcionarios;
@@ -869,7 +877,7 @@ function heMediaMensal(l){
 function agregarPorMes(lancamentos){
   const porMes = {}; // mes -> {funcionarios, admissoes, demissoes, faltas, diasUteisMax, horasExtras}
   lancamentos.forEach(l=>{
-    if(!porMes[l.mes]) porMes[l.mes] = {mes:l.mes, funcionarios:0, admissoes:0, demissoes:0, faltas:0, diasUteis:0, horasExtras:0, horasExtrasValor:0, horasPrevistas:0, horasAbsenteismo:0, count:0};
+    if(!porMes[l.mes]) porMes[l.mes] = {mes:l.mes, funcionarios:0, admissoes:0, demissoes:0, faltas:0, diasUteis:0, horasExtras:0, horasExtrasValor:0, horasPrevistas:0, horasAbsenteismo:0, absenteismoSoma:0, absenteismoCount:0, count:0};
     const m = porMes[l.mes];
     m.funcionarios += l.funcionarios;
     m.admissoes += l.admissoes;
@@ -880,14 +888,16 @@ function agregarPorMes(lancamentos){
     m.horasExtrasValor += (l.horasExtrasValor||0);
     m.horasPrevistas += (l.horasPrevistas||0);
     m.horasAbsenteismo += (l.horasAbsenteismo||0);
+    m.absenteismoSoma += absenteismoMensal(l);
+    m.absenteismoCount++;
     m.count++;
   });
   return Object.values(porMes).sort((a,b)=>a.mes-b.mes);
 }
+// média do absenteísmo entre os lançamentos do mês — cada lançamento já usa o valor manual,
+// os dados de horas importados de PDF, ou o cálculo por dias, na prioridade definida em absenteismoMensal()
 function absenteismoFromAgg(m){
-  if(m.horasPrevistas>0) return (m.horasAbsenteismo / m.horasPrevistas) * 100;
-  if(!m.diasUteis) return 0;
-  return (m.faltas / (m.diasUteis*m.funcionarios||1)) * 100;
+  return m.absenteismoCount ? (m.absenteismoSoma / m.absenteismoCount) : 0;
 }
 
 /* ============ DASHBOARD ============ */
