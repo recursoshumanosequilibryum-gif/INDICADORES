@@ -258,7 +258,7 @@ tr:hover td{background:var(--slate-light);}
       </div>
       <div class="card">
         <table id="tbl-absenteismo-individual">
-          <thead><tr><th>Mês/Ano</th><th>Empresa</th><th>Departamento</th><th>Colaborador</th><th>Horas previstas</th><th>Horas trabalhadas</th><th>Aus. injustificada</th><th>Aus. justificada</th><th>Total ausência</th><th>%</th><th></th></tr></thead>
+          <thead><tr><th>Mês/Ano</th><th>Empresa</th><th>Departamento</th><th>Colaborador</th><th>Horas previstas</th><th>Horas trabalhadas</th><th>Faltas injustificadas</th><th>Faltas justificadas</th><th>Total ausência</th><th>%</th><th></th></tr></thead>
           <tbody></tbody>
         </table>
         <div class="empty" id="absenteismo-individual-empty" style="display:none;">Nenhum registro importado ainda. Use "Importar relatório" na tela de Lançamento Mensal.</div>
@@ -1261,53 +1261,78 @@ function groupTextIntoRows(items){
   }).filter(line=>line.length>0);
 }
 
-const ROW_REGEX = /^(.*?)\s+(\d{1,3}:\d{2})\s+(\d{1,3}:\d{2})\s+(\d{1,3}:\d{2})\s+(\d{1,3}:\d{2})\s+(\d{1,3}:\d{2})\s+([\d.]+)\s+(\d{1,3}:\d{2})\s+([\d.]+)\s+(\d{1,3}:\d{2})\s+([\d.]+)\s+(\d{1,3}:\d{2})\s+([\d.]+)\s*$/;
+const MIN_TIME_TOKENS = 4;
+let lastImportRawLines = [];
+
+// Extrai um registro de colaborador de uma linha reconstruída, com base apenas
+// nas posições dos valores HH:MM (mais confiável do que tentar casar percentuais,
+// que variam de formatação — "0", "0.00", "0,00" — entre relatórios).
+function parseEmployeeRow(line){
+  const timeMatches = [...line.matchAll(/\d{1,3}:\d{2}/g)];
+  if(timeMatches.length < MIN_TIME_TOKENS) return null;
+  const firstIdx = timeMatches[0].index;
+  let nome = line.slice(0, firstIdx).trim().replace(/^\d+\s+/, '');
+  if(!nome) return null;
+  if(/^(total|colaborador|cargo|c[oó]d|hor[ao]s|per[ií]odo|empregador|cnpj|p[aá]gina)/i.test(nome)) return null;
+
+  const times = timeMatches.map(m=>hhmmToDecimal(m[0]));
+  let horasPrevistas, horasTrabalhadas, horasExtras, absInjustificado, absJustificado, absTotal;
+  if(times.length>=8){
+    horasPrevistas = times[0];
+    horasExtras = times[2];
+    horasTrabalhadas = times[3];
+    absInjustificado = times[5];
+    absJustificado = times[6];
+    absTotal = times[7];
+  } else {
+    horasPrevistas = times[0];
+    horasTrabalhadas = times.length>=4 ? times[3] : times[times.length-1];
+    horasExtras = times.length>=3 ? times[2] : 0;
+    absInjustificado = 0;
+    absJustificado = 0;
+    absTotal = times[times.length-1];
+  }
+  const absTotalPct = horasPrevistas ? (absTotal/horasPrevistas*100) : 0;
+  return { colaborador: nome, horasPrevistas, horasTrabalhadas, horasExtras, absInjustificado, absJustificado, absTotal, absTotalPct };
+}
 
 function parseAbsenteeismoLines(lines){
-  const groups = []; // { label, periodoInicio, periodoFim, rows:[] }
+  lastImportRawLines = lines;
+  const groups = []; // { label, mes, ano, rows:[] }
   let current = null;
+  let pendingPeriodo = null;
+  const unmatched = []; // linhas com dados de colaborador encontradas antes de qualquer "Empregador"
+
   lines.forEach(line=>{
-    const empregadorMatch = /empregador\s*:?\s*(.+)/i.exec(line);
     const periodoMatch = /per[ií]odo\s*:?\s*(\d{2}\/\d{2}\/\d{4})\s*a\s*(\d{2}\/\d{2}\/\d{4})/i.exec(line);
-    if(periodoMatch){
-      // marca período pendente para o próximo grupo detectado
-      parseAbsenteeismoLines._periodo = periodoMatch;
-      return;
-    }
-    if(empregadorMatch && !/total/i.test(line)){
-      const label = empregadorMatch[1].trim();
-      current = { label, rows: [] };
-      const per = parseAbsenteeismoLines._periodo;
-      if(per){
-        const fim = per[2].split('/');
+    if(periodoMatch) pendingPeriodo = periodoMatch;
+
+    const empregadorMatch = /empregador\s*:?\s*([^:]+?)(?=\s*(?:cpf\/cnpj|per[ií]odo)\b|$)/i.exec(line);
+    if(empregadorMatch && empregadorMatch[1].trim()){
+      current = { label: empregadorMatch[1].trim(), rows: [] };
+      if(pendingPeriodo){
+        const fim = pendingPeriodo[2].split('/');
         current.mes = parseInt(fim[1],10);
         current.ano = parseInt(fim[2],10);
       }
       groups.push(current);
       return;
     }
-    if(/total geral/i.test(line)) return;
-    if(!current) return;
-    const m = ROW_REGEX.exec(line);
-    if(!m) return;
-    const nomeCargo = m[1].trim();
-    current.rows.push({
-      colaborador: nomeCargo,
-      horasPrevistas: hhmmToDecimal(m[2]),
-      horasNormais: hhmmToDecimal(m[3]),
-      horasExtras: hhmmToDecimal(m[4]),
-      horasTotais: hhmmToDecimal(m[5]),
-      atrasos: hhmmToDecimal(m[6]),
-      atrasosPct: parseFloat(m[7])||0,
-      absInjustificado: hhmmToDecimal(m[8]),
-      absInjustificadoPct: parseFloat(m[9])||0,
-      absJustificado: hhmmToDecimal(m[10]),
-      absJustificadoPct: parseFloat(m[11])||0,
-      absTotal: hhmmToDecimal(m[12]),
-      absTotalPct: parseFloat(m[13])||0,
-    });
+    if(/total\s+geral/i.test(line)) return;
+
+    const row = parseEmployeeRow(line);
+    if(!row) return;
+    if(current) current.rows.push(row);
+    else unmatched.push(row);
   });
-  return groups.filter(g=>g.rows.length>0);
+
+  const result = groups.filter(g=>g.rows.length>0);
+  // fallback: se nenhuma unidade ("Empregador") foi reconhecida mas há linhas de
+  // colaborador válidas, agrupa tudo num grupo único para não descartar a importação
+  if(result.length===0 && unmatched.length>0){
+    result.push({ label: 'Relatório importado (unidade não identificada)', rows: unmatched });
+  }
+  return result;
 }
 
 // tenta casar o rótulo do "Empregador" do PDF com um departamento já cadastrado
@@ -1340,7 +1365,7 @@ async function handlePdfUpload(event){
     }
     const groups = parseAbsenteeismoLines(allLines);
     if(!groups.length){
-      toast('Não foi possível reconhecer dados no PDF. Verifique se é o formato esperado.');
+      showImportDebug(allLines);
       document.getElementById('import-loading').style.display = 'none';
       return;
     }
@@ -1354,6 +1379,25 @@ async function handlePdfUpload(event){
     toast('Erro ao ler o PDF');
   }
   document.getElementById('import-loading').style.display = 'none';
+}
+
+function showImportDebug(lines){
+  document.getElementById('import-step-upload').style.display = 'none';
+  document.getElementById('import-step-preview').style.display = 'block';
+  document.getElementById('btn-confirm-import').style.display = 'none';
+  document.getElementById('import-summary').innerHTML =
+    'Não foi possível identificar linhas de colaborador neste PDF. Abaixo está o texto que consegui extrair — copie e me envie no chat para eu ajustar o reconhecimento a este modelo.';
+  const container = document.getElementById('import-groups');
+  const text = lines.join('\n');
+  container.innerHTML = `
+    <textarea id="import-debug-text" readonly style="width:100%;height:260px;font-family:monospace;font-size:12px;padding:10px;border:1px solid var(--border);border-radius:8px;">${escapeHtml(text)}</textarea>
+    <button class="btn ghost small" style="margin-top:8px;" onclick="copyImportDebugText()">Copiar texto</button>`;
+}
+function copyImportDebugText(){
+  const el = document.getElementById('import-debug-text');
+  el.select();
+  document.execCommand('copy');
+  toast('Texto copiado');
 }
 
 function renderImportPreview(){
@@ -1431,7 +1475,7 @@ function confirmImportAbsenteeismo(){
         id: uid(), departamentoId: g.departamentoId, ano, mes,
         colaborador: r.colaborador,
         horasPrevistas: r.horasPrevistas,
-        horasTrabalhadas: r.horasTotais,
+        horasTrabalhadas: r.horasTrabalhadas,
         absInjustificado: r.absInjustificado,
         absJustificado: r.absJustificado,
         absTotal: r.absTotal,
