@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Painel Mensal de Indicadores de RH</title>
+<style>
+  :root {
+    --ink: #1c2430;
+    --ink-soft: #4a5568;
+    --paper: #f6f5f1;
+    --panel: #ffffff;
+    --line: #dcdad2;
+    --accent: #2f5d5a;       /* verde-petróleo, remete a "estável/saudável" */
+    --accent-soft: #e4ede9;
+    --warn: #b4780f;
+    --warn-soft: #f7ecd8;
+    --crit: #a13d3d;
+    --crit-soft: #f6e2e0;
+    --ok: #2f7a4f;
+    --ok-soft: #e2efe4;
+    --mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Iowan Old Style', 'Georgia', serif;
+    line-height: 1.5;
+  }
+
+  .wrap {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+  }
+
+  header.top {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    border-bottom: 2px solid var(--ink);
+    padding-bottom: 18px;
+    margin-bottom: 6px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  header.top h1 {
+    font-size: 1.55rem;
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+
+  header.top .tag {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-soft);
+    align-self: flex-end;
+  }
+
+  .sub {
+    color: var(--ink-soft);
+    font-size: 0.95rem;
+    margin: 10px 0 30px;
+  }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 28px 30px;
+    margin-bottom: 26px;
+  }
+
+  .panel h2 {
+    font-size: 1.02rem;
+    margin: 0 0 20px;
+    font-family: var(--mono);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .panel h2::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--line);
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 18px 22px;
+  }
+
+  .field label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ink-soft);
+    margin-bottom: 6px;
+  }
+
+  .field input, .field select {
+    width: 100%;
+    padding: 9px 10px;
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    font-family: var(--mono);
+    font-size: 0.95rem;
+    background: #fdfdfc;
+    color: var(--ink);
+  }
+
+  .field input:focus, .field select:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+
+  .field .hint {
+    font-size: 0.72rem;
+    color: #93897a;
+    margin-top: 4px;
+  }
+
+  .row-split {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 26px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  button {
+    font-family: var(--mono);
+    font-size: 0.82rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 12px 22px;
+    border-radius: 2px;
+    border: 1px solid var(--ink);
+    cursor: pointer;
+    background: var(--ink);
+    color: var(--paper);
+    transition: opacity 0.15s ease;
+  }
+
+  button:hover { opacity: 0.85; }
+
+  button.secondary {
+    background: transparent;
+    color: var(--ink);
+    border: 1px solid var(--line);
+  }
+
+  button.ghost {
+    background: transparent;
+    color: var(--ink-soft);
+    border: none;
+    padding: 8px 4px;
+    text-decoration: underline;
+  }
+
+  .status-msg {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    color: var(--ink-soft);
+  }
+
+  .status-msg.err { color: var(--crit); }
+  .status-msg.ok { color: var(--ok); }
+
+  /* histórico */
+  table.history {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 0.82rem;
+  }
+
+  table.history th {
+    text-align: left;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ink-soft);
+    border-bottom: 1px solid var(--ink);
+    padding: 6px 10px;
+  }
+
+  table.history td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  table.history tr:hover td { background: #fbfaf7; }
+
+  .del-btn {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    color: var(--crit);
+    background: none;
+    border: none;
+    padding: 0;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+
+  .empty {
+    color: #93897a;
+    font-size: 0.88rem;
+    font-style: italic;
+  }
+
+  /* relatório gerado */
+  .report-box {
+    background: #fbfaf7;
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    padding: 26px 28px;
+    font-family: var(--mono);
+    font-size: 0.86rem;
+    white-space: pre-wrap;
+    color: var(--ink);
+    max-height: 600px;
+    overflow-y: auto;
+  }
+
+  .pill {
+    display: inline-block;
+    padding: 2px 9px;
+    border-radius: 20px;
+    font-size: 0.7rem;
+    font-weight: 600;
+  }
+
+  .pill.ok { background: var(--ok-soft); color: var(--ok); }
+  .pill.warn { background: var(--warn-soft); color: var(--warn); }
+  .pill.crit { background: var(--crit-soft); color: var(--crit); }
+
+  footer {
+    text-align: center;
+    color: #93897a;
+    font-size: 0.78rem;
+    margin-top: 40px;
+    font-family: var(--mono);
+  }
+
+  @media (max-width: 600px) {
+    .panel { padding: 20px 18px; }
+    .row-split { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <h1>Painel Mensal de Indicadores de RH</h1>
+    <span class="tag">alimente &amp; gere</span>
+  </header>
+  <p class="sub">Preencha os números do mês. O sistema busca o mês anterior salvo automaticamente, calcula variações, compara com metas e monta o relatório com recomendações.</p>
+
+  <!-- FORMULÁRIO -->
+  <section class="panel">
+    <h2>Dados do mês</h2>
+    <div class="grid">
+      <div class="field">
+        <label for="area">Área / Departamento</label>
+        <input type="text" id="area" placeholder="Ex: Operações, ou 'Empresa toda'">
+      </div>
+      <div class="field">
+        <label for="mes">Mês de referência</label>
+        <input type="month" id="mes">
+      </div>
+      <div class="field">
+        <label for="headcount">Headcount total</label>
+        <input type="number" id="headcount" placeholder="ex: 340">
+      </div>
+    </div>
+
+    <div class="grid" style="margin-top:20px;">
+      <div class="field">
+        <label for="turnover">Turnover (%)</label>
+        <input type="number" step="0.1" id="turnover">
+        <div class="hint">meta opcional abaixo</div>
+      </div>
+      <div class="field">
+        <label for="meta_turnover">Meta de turnover (%)</label>
+        <input type="number" step="0.1" id="meta_turnover" placeholder="opcional">
+      </div>
+      <div class="field">
+        <label for="absenteismo">Absenteísmo (%)</label>
+        <input type="number" step="0.1" id="absenteismo">
+      </div>
+      <div class="field">
+        <label for="meta_absenteismo">Meta de absenteísmo (%)</label>
+        <input type="number" step="0.1" id="meta_absenteismo" placeholder="opcional">
+      </div>
+      <div class="field">
+        <label for="admissoes">Admissões (nº)</label>
+        <input type="number" id="admissoes">
+      </div>
+      <div class="field">
+        <label for="desligamentos">Desligamentos (nº)</label>
+        <input type="number" id="desligamentos">
+      </div>
+      <div class="field">
+        <label for="horas_extras">Horas extras (% da jornada)</label>
+        <input type="number" step="0.1" id="horas_extras">
+      </div>
+      <div class="field">
+        <label for="meta_horas_extras">Meta de horas extras (%)</label>
+        <input type="number" step="0.1" id="meta_horas_extras" placeholder="opcional">
+      </div>
+    </div>
+
+    <div class="actions">
+      <button id="btnGerar">Gerar relatório</button>
+      <button class="secondary" id="btnLimpar">Limpar campos</button>
+      <span class="status-msg" id="statusMsg"></span>
+    </div>
+  </section>
+
+  <!-- RELATÓRIO -->
+  <section class="panel" id="reportPanel" style="display:none;">
+    <h2>Relatório gerado</h2>
+    <div class="report-box" id="reportBox"></div>
+    <div class="actions">
+      <button class="secondary" id="btnCopiar">Copiar texto</button>
+      <span class="status-msg" id="copyMsg"></span>
+    </div>
+  </section>
+
+  <!-- HISTÓRICO -->
+  <section class="panel">
+    <h2>Histórico salvo</h2>
+    <div id="historyWrap"><p class="empty">Carregando...</p></div>
+  </section>
+
+  <footer>dados salvos apenas neste navegador, de forma privada — não são compartilhados</footer>
+</div>
+
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+
+  const fields = ['area','mes','headcount','turnover','meta_turnover','absenteismo',
+                   'meta_absenteismo','admissoes','desligamentos','horas_extras','meta_horas_extras'];
+
+  function slug(s) {
+    return (s || 'geral').toLowerCase().trim()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'geral';
+  }
+
+  function setStatus(msg, type) {
+    const el = $('statusMsg');
+    el.textContent = msg;
+    el.className = 'status-msg' + (type ? ' ' + type : '');
+  }
+
+  async function saveEntry(entry) {
+    const key = `entries:${slug(entry.area)}:${entry.mes}`;
+    await window.storage.set(key, JSON.stringify(entry), false);
+  }
+
+  async function listEntriesForArea(areaSlug) {
+    try {
+      const res = await window.storage.list(`entries:${areaSlug}:`, false);
+      if (!res || !res.keys) return [];
+      const out = [];
+      for (const k of res.keys) {
+        try {
+          const r = await window.storage.get(k, false);
+          if (r && r.value) out.push(JSON.parse(r.value));
+        } catch (e) { /* ignore missing */ }
+      }
+      out.sort((a, b) => a.mes.localeCompare(b.mes));
+      return out;
+    } catch (e) {
+      return [];
+    }
+  }
+
+  async function listAllAreas() {
+    try {
+      const res = await window.storage.list('entries:', false);
+      if (!res || !res.keys) return [];
+      const areas = new Set();
+      res.keys.forEach(k => {
+        const parts = k.split(':');
+        if (parts.length >= 3) areas.add(parts[1]);
+      });
+      return Array.from(areas);
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function pct(atual, anterior) {
+    if (anterior === null || anterior === undefined || anterior === '' || isNaN(anterior)) return null;
+    if (Number(anterior) === 0) return null;
+    return ((Number(atual) - Number(anterior)) / Math.abs(Number(anterior))) * 100;
+  }
+
+  function seta(variacao) {
+    if (variacao === null) return '(sem dado anterior)';
+    if (variacao > 2) return `▲ subiu ${variacao.toFixed(1)}%`;
+    if (variacao < -2) return `▼ caiu ${Math.abs(variacao).toFixed(1)}%`;
+    return `► estável (${variacao.toFixed(1)}%)`;
+  }
+
+  // menor é melhor (turnover, absenteismo, horas extras)
+  function severidade(atual, meta) {
+    if (meta === null || meta === undefined || meta === '' || isNaN(meta) || Number(meta) === 0) {
+      return { nivel: null, label: '' };
+    }
+    const diff = ((Number(atual) - Number(meta)) / Number(meta)) * 100;
+    if (diff <= 0) return { nivel: 'ok', label: 'dentro da meta' };
+    if (diff <= 25) return { nivel: 'warn', label: `${diff.toFixed(0)}% acima da meta` };
+    return { nivel: 'crit', label: `${diff.toFixed(0)}% acima da meta` };
+  }
+
+  function pillTxt(sev) {
+    if (!sev.nivel) return '[sem meta informada]';
+    const map = { ok: '🟢', warn: '🟡', crit: '🔴' };
+    return `${map[sev.nivel]} ${sev.label}`;
+  }
+
+  function gerarTexto(atual, anterior) {
+    const varTurnover = pct(atual.turnover, anterior ? anterior.turnover : null);
+    const varAbsent = pct(atual.absenteismo, anterior ? anterior.absenteismo : null);
+    const varHoras = pct(atual.horas_extras, anterior ? anterior.horas_extras : null);
+
+    const sevTurnover = severidade(atual.turnover, atual.meta_turnover);
+    const sevAbsent = severidade(atual.absenteismo, atual.meta_absenteismo);
+    const sevHoras = severidade(atual.horas_extras, atual.meta_horas_extras);
+
+    const saldo = (Number(atual.admissoes) || 0) - (Number(atual.desligamentos) || 0);
+
+    // cruzamentos
+    const alertas = [];
+    if (sevTurnover.nivel && sevTurnover.nivel !== 'ok' && sevAbsent.nivel && sevAbsent.nivel !== 'ok') {
+      alertas.push('Turnover e absenteísmo elevados ao mesmo tempo — possível sinal de insatisfação ou problema de clima organizacional.');
+    }
+    if (saldo < 0) {
+      alertas.push(`Desligamentos superaram admissões em ${Math.abs(saldo)} — headcount em contração. Avaliar se é planejado ou reativo.`);
+    }
+    if (sevHoras.nivel && sevHoras.nivel !== 'ok' && saldo < 0) {
+      alertas.push('Horas extras acima da meta combinadas com queda de headcount — risco de sobrecarga da equipe atual.');
+    }
+    if (alertas.length === 0) {
+      alertas.push('Nenhum cruzamento crítico identificado neste mês com os dados informados.');
+    }
+
+    // recomendações priorizadas por severidade
+    const recs = [];
+    const candidatos = [
+      { nivel: sevTurnover.nivel, texto: 'Investigar causas de saída (entrevistas de desligamento) e revisar políticas de retenção, especialmente em áreas com maior rotatividade.' },
+      { nivel: sevAbsent.nivel, texto: 'Mapear causas de ausência (saúde, clima, sobrecarga) e considerar pesquisa de clima ou conversas 1:1 com lideranças.' },
+      { nivel: sevHoras.nivel, texto: 'Revisar dimensionamento de equipe e distribuição de carga de trabalho antes que horas extras virem padrão estrutural.' },
+    ];
+    candidatos.sort((a, b) => {
+      const ordem = { crit: 0, warn: 1, ok: 2, null: 3 };
+      return (ordem[a.nivel] ?? 3) - (ordem[b.nivel] ?? 3);
+    });
+    candidatos.forEach(c => { if (c.nivel === 'crit' || c.nivel === 'warn') recs.push(c.texto); });
+    if (saldo < 0) recs.push('Reavaliar plano de contratação do próximo mês frente ao volume de desligamentos.');
+    if (recs.length === 0) recs.push('Manter monitoramento mensal; nenhum indicador exige ação imediata.');
+
+    const linhas = [];
+    linhas.push('RELATÓRIO MENSAL DE INDICADORES DE RH');
+    linhas.push(`Período: ${atual.mes} | Área: ${atual.area || 'Geral'}`);
+    linhas.push('');
+    linhas.push('RESUMO EXECUTIVO');
+    linhas.push(`Headcount atual: ${atual.headcount || 'não informado'}${anterior && anterior.headcount ? ` (mês anterior: ${anterior.headcount})` : ''}. Turnover em ${atual.turnover}%, absenteísmo em ${atual.absenteismo}%, saldo de contratações de ${saldo >= 0 ? '+' : ''}${saldo} no mês.`);
+    linhas.push('');
+    linhas.push('1. TURNOVER');
+    linhas.push(`Resultado: ${atual.turnover}% — ${seta(varTurnover)}`);
+    linhas.push(`Frente à meta: ${pillTxt(sevTurnover)}`);
+    linhas.push('');
+    linhas.push('2. ABSENTEÍSMO');
+    linhas.push(`Resultado: ${atual.absenteismo}% — ${seta(varAbsent)}`);
+    linhas.push(`Frente à meta: ${pillTxt(sevAbsent)}`);
+    linhas.push('');
+    linhas.push('3. MOVIMENTAÇÃO DE PESSOAL');
+    linhas.push(`Admissões: ${atual.admissoes} | Desligamentos: ${atual.desligamentos}`);
+    linhas.push(`Saldo do mês: ${saldo >= 0 ? '+' : ''}${saldo}`);
+    linhas.push('');
+    linhas.push('4. HORAS EXTRAS');
+    linhas.push(`Resultado: ${atual.horas_extras}% — ${seta(varHoras)}`);
+    linhas.push(`Frente à meta: ${pillTxt(sevHoras)}`);
+    linhas.push('');
+    linhas.push('CRUZAMENTOS E ALERTAS');
+    alertas.forEach(a => linhas.push(`- ${a}`));
+    linhas.push('');
+    linhas.push('RECOMENDAÇÕES DO MÊS');
+    recs.forEach((r, i) => linhas.push(`${i + 1}. ${r}`));
+
+    return linhas.join('\n');
+  }
+
+  async function renderHistory() {
+    const wrap = $('historyWrap');
+    wrap.innerHTML = '<p class="empty">Carregando...</p>';
+    const areas = await listAllAreas();
+    if (areas.length === 0) {
+      wrap.innerHTML = '<p class="empty">Nenhum registro salvo ainda. Gere o primeiro relatório acima.</p>';
+      return;
+    }
+    let html = '';
+    for (const areaSlug of areas) {
+      const entries = await listEntriesForArea(areaSlug);
+      if (entries.length === 0) continue;
+      const nomeArea = entries[0].area || areaSlug;
+      html += `<p style="font-family:var(--mono); font-size:0.78rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--ink-soft); margin:18px 0 8px;">${nomeArea}</p>`;
+      html += '<table class="history"><thead><tr><th>Mês</th><th>Turnover</th><th>Absent.</th><th>Adm.</th><th>Deslig.</th><th>H.Extra</th><th></th></tr></thead><tbody>';
+      entries.slice().reverse().forEach(e => {
+        html += `<tr>
+          <td>${e.mes}</td>
+          <td>${e.turnover}%</td>
+          <td>${e.absenteismo}%</td>
+          <td>${e.admissoes}</td>
+          <td>${e.desligamentos}</td>
+          <td>${e.horas_extras}%</td>
+          <td><button class="del-btn" data-key="entries:${areaSlug}:${e.mes}">apagar</button></td>
+        </tr>`;
+      });
+      html += '</tbody></table>';
+    }
+    wrap.innerHTML = html || '<p class="empty">Nenhum registro salvo ainda.</p>';
+
+    wrap.querySelectorAll('.del-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        try {
+          await window.storage.delete(btn.dataset.key, false);
+          renderHistory();
+        } catch (e) {
+          alert('Não foi possível apagar este registro.');
+        }
+      });
+    });
+  }
+
+  async function gerar() {
+    const area = $('area').value.trim();
+    const mes = $('mes').value;
+    if (!mes) { setStatus('Informe o mês de referência.', 'err'); return; }
+
+    const atual = {
+      area, mes,
+      headcount: $('headcount').value,
+      turnover: $('turnover').value,
+      meta_turnover: $('meta_turnover').value,
+      absenteismo: $('absenteismo').value,
+      meta_absenteismo: $('meta_absenteismo').value,
+      admissoes: $('admissoes').value,
+      desligamentos: $('desligamentos').value,
+      horas_extras: $('horas_extras').value,
+      meta_horas_extras: $('meta_horas_extras').value,
+    };
+
+    if (atual.turnover === '' || atual.absenteismo === '' || atual.admissoes === '' ||
+        atual.desligamentos === '' || atual.horas_extras === '') {
+      setStatus('Preencha ao menos turnover, absenteísmo, admissões, desligamentos e horas extras.', 'err');
+      return;
+    }
+
+    setStatus('Gerando...', '');
+
+    const aSlug = slug(area);
+    const historico = await listEntriesForArea(aSlug);
+    const anteriores = historico.filter(e => e.mes < mes);
+    const anterior = anteriores.length ? anteriores[anteriores.length - 1] : null;
+
+    const texto = gerarTexto(atual, anterior);
+    $('reportBox').textContent = texto;
+    $('reportPanel').style.display = 'block';
+    $('reportPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    try {
+      await saveEntry(atual);
+      setStatus('Relatório gerado e mês salvo no histórico.', 'ok');
+      renderHistory();
+    } catch (e) {
+      setStatus('Relatório gerado, mas houve erro ao salvar no histórico.', 'err');
+    }
+  }
+
+  $('btnGerar').addEventListener('click', gerar);
+
+  $('btnLimpar').addEventListener('click', () => {
+    fields.forEach(f => { if ($(f)) $(f).value = ''; });
+    setStatus('Campos limpos.', '');
+  });
+
+  $('btnCopiar').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText($('reportBox').textContent);
+      $('copyMsg').textContent = 'Copiado!';
+      $('copyMsg').className = 'status-msg ok';
+      setTimeout(() => { $('copyMsg').textContent = ''; }, 2000);
+    } catch (e) {
+      $('copyMsg').textContent = 'Não foi possível copiar automaticamente — selecione o texto manualmente.';
+      $('copyMsg').className = 'status-msg err';
+    }
+  });
+
+  renderHistory();
+})();
+</script>
+</body>
+</html>
