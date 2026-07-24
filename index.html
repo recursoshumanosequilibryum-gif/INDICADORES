@@ -3,630 +3,1027 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Painel Mensal de Indicadores de RH</title>
+<title>Indicadores de RH</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.3/chart.umd.min.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
-  :root {
-    --ink: #1c2430;
-    --ink-soft: #4a5568;
-    --paper: #f6f5f1;
-    --panel: #ffffff;
-    --line: #dcdad2;
-    --accent: #2f5d5a;       /* verde-petróleo, remete a "estável/saudável" */
-    --accent-soft: #e4ede9;
-    --warn: #b4780f;
-    --warn-soft: #f7ecd8;
-    --crit: #a13d3d;
-    --crit-soft: #f6e2e0;
-    --ok: #2f7a4f;
-    --ok-soft: #e2efe4;
-    --mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
-  }
-
-  * { box-sizing: border-box; }
-
-  body {
-    margin: 0;
-    background: var(--paper);
-    color: var(--ink);
-    font-family: 'Iowan Old Style', 'Georgia', serif;
-    line-height: 1.5;
-  }
-
-  .wrap {
-    max-width: 980px;
-    margin: 0 auto;
-    padding: 40px 24px 80px;
-  }
-
-  header.top {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    border-bottom: 2px solid var(--ink);
-    padding-bottom: 18px;
-    margin-bottom: 6px;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-
-  header.top h1 {
-    font-size: 1.55rem;
-    margin: 0;
-    letter-spacing: -0.01em;
-  }
-
-  header.top .tag {
-    font-family: var(--mono);
-    font-size: 0.72rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--ink-soft);
-    align-self: flex-end;
-  }
-
-  .sub {
-    color: var(--ink-soft);
-    font-size: 0.95rem;
-    margin: 10px 0 30px;
-  }
-
-  .panel {
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 3px;
-    padding: 28px 30px;
-    margin-bottom: 26px;
-  }
-
-  .panel h2 {
-    font-size: 1.02rem;
-    margin: 0 0 20px;
-    font-family: var(--mono);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--ink);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .panel h2::after {
-    content: "";
-    flex: 1;
-    height: 1px;
-    background: var(--line);
-  }
-
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-    gap: 18px 22px;
-  }
-
-  .field label {
-    display: block;
-    font-family: var(--mono);
-    font-size: 0.72rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--ink-soft);
-    margin-bottom: 6px;
-  }
-
-  .field input, .field select {
-    width: 100%;
-    padding: 9px 10px;
-    border: 1px solid var(--line);
-    border-radius: 2px;
-    font-family: var(--mono);
-    font-size: 0.95rem;
-    background: #fdfdfc;
-    color: var(--ink);
-  }
-
-  .field input:focus, .field select:focus {
-    outline: 2px solid var(--accent);
-    outline-offset: 1px;
-  }
-
-  .field .hint {
-    font-size: 0.72rem;
-    color: #93897a;
-    margin-top: 4px;
-  }
-
-  .row-split {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-  }
-
-  .actions {
-    display: flex;
-    gap: 12px;
-    margin-top: 26px;
-    flex-wrap: wrap;
-    align-items: center;
-  }
-
-  button {
-    font-family: var(--mono);
-    font-size: 0.82rem;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    padding: 12px 22px;
-    border-radius: 2px;
-    border: 1px solid var(--ink);
-    cursor: pointer;
-    background: var(--ink);
-    color: var(--paper);
-    transition: opacity 0.15s ease;
-  }
-
-  button:hover { opacity: 0.85; }
-
-  button.secondary {
-    background: transparent;
-    color: var(--ink);
-    border: 1px solid var(--line);
-  }
-
-  button.ghost {
-    background: transparent;
-    color: var(--ink-soft);
-    border: none;
-    padding: 8px 4px;
-    text-decoration: underline;
-  }
-
-  .status-msg {
-    font-family: var(--mono);
-    font-size: 0.78rem;
-    color: var(--ink-soft);
-  }
-
-  .status-msg.err { color: var(--crit); }
-  .status-msg.ok { color: var(--ok); }
-
-  /* histórico */
-  table.history {
-    width: 100%;
-    border-collapse: collapse;
-    font-family: var(--mono);
-    font-size: 0.82rem;
-  }
-
-  table.history th {
-    text-align: left;
-    font-size: 0.68rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--ink-soft);
-    border-bottom: 1px solid var(--ink);
-    padding: 6px 10px;
-  }
-
-  table.history td {
-    padding: 8px 10px;
-    border-bottom: 1px solid var(--line);
-  }
-
-  table.history tr:hover td { background: #fbfaf7; }
-
-  .del-btn {
-    font-family: var(--mono);
-    font-size: 0.7rem;
-    color: var(--crit);
-    background: none;
-    border: none;
-    padding: 0;
-    text-decoration: underline;
-    cursor: pointer;
-  }
-
-  .empty {
-    color: #93897a;
-    font-size: 0.88rem;
-    font-style: italic;
-  }
-
-  /* relatório gerado */
-  .report-box {
-    background: #fbfaf7;
-    border: 1px solid var(--line);
-    border-radius: 2px;
-    padding: 26px 28px;
-    font-family: var(--mono);
-    font-size: 0.86rem;
-    white-space: pre-wrap;
-    color: var(--ink);
-    max-height: 600px;
-    overflow-y: auto;
-  }
-
-  .pill {
-    display: inline-block;
-    padding: 2px 9px;
-    border-radius: 20px;
-    font-size: 0.7rem;
-    font-weight: 600;
-  }
-
-  .pill.ok { background: var(--ok-soft); color: var(--ok); }
-  .pill.warn { background: var(--warn-soft); color: var(--warn); }
-  .pill.crit { background: var(--crit-soft); color: var(--crit); }
-
-  footer {
-    text-align: center;
-    color: #93897a;
-    font-size: 0.78rem;
-    margin-top: 40px;
-    font-family: var(--mono);
-  }
-
-  @media (max-width: 600px) {
-    .panel { padding: 20px 18px; }
-    .row-split { grid-template-columns: 1fr; }
-  }
+:root{
+  --teal:#3A8C88;
+  --teal-dark:#2E6E6B;
+  --teal-light:#E7F3F2;
+  --slate:#4A6278;
+  --slate-dark:#37495A;
+  --slate-light:#EEF1F4;
+  --bg:#F5F7F8;
+  --card:#FFFFFF;
+  --text:#22303A;
+  --muted:#6B7C89;
+  --border:#DDE4E7;
+  --danger:#C6564F;
+  --warn:#C98A2E;
+  --ok:#3A8C58;
+  --radius:10px;
+}
+*{box-sizing:border-box;}
+body{margin:0;font-family:'Segoe UI',Roboto,Arial,sans-serif;background:var(--bg);color:var(--text);}
+a{color:inherit;}
+.layout{display:flex;min-height:100vh;}
+/* Sidebar */
+.sidebar{width:230px;background:var(--slate-dark);color:#fff;display:flex;flex-direction:column;flex-shrink:0;}
+.sidebar .brand{padding:20px 18px;font-size:18px;font-weight:700;border-bottom:1px solid rgba(255,255,255,.12);}
+.sidebar .brand span{color:var(--teal);}
+.sidebar nav{flex:1;padding:10px 0;}
+.sidebar nav a{display:flex;align-items:center;gap:10px;padding:12px 18px;color:#cfe0e6;text-decoration:none;font-size:14px;cursor:pointer;border-left:3px solid transparent;}
+.sidebar nav a:hover{background:rgba(255,255,255,.06);}
+.sidebar nav a.active{background:rgba(58,140,136,.25);border-left-color:var(--teal);color:#fff;font-weight:600;}
+.sidebar .foot{padding:14px 18px;font-size:11px;color:#93a8b3;border-top:1px solid rgba(255,255,255,.1);}
+/* Main */
+.main{flex:1;padding:26px 34px;max-width:1400px;}
+.topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:22px;}
+.topbar h1{font-size:22px;margin:0;}
+.topbar .sub{color:var(--muted);font-size:13px;margin-top:2px;}
+.btn{background:var(--teal);color:#fff;border:none;padding:9px 16px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;}
+.btn:hover{background:var(--teal-dark);}
+.btn.secondary{background:var(--slate);}
+.btn.secondary:hover{background:var(--slate-dark);}
+.btn.danger{background:var(--danger);}
+.btn.ghost{background:transparent;color:var(--slate);border:1px solid var(--border);}
+.btn.small{padding:5px 10px;font-size:12px;}
+.card{background:var(--card);border-radius:var(--radius);padding:18px 20px;border:1px solid var(--border);}
+.grid{display:grid;gap:16px;}
+.grid.cols-4{grid-template-columns:repeat(4,1fr);}
+.grid.cols-3{grid-template-columns:repeat(3,1fr);}
+.grid.cols-2{grid-template-columns:repeat(2,1fr);}
+@media(max-width:1100px){.grid.cols-4{grid-template-columns:repeat(2,1fr);}.grid.cols-3{grid-template-columns:repeat(2,1fr);}}
+.kpi{padding:18px;}
+.kpi .label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;}
+.kpi .value{font-size:28px;font-weight:700;margin-top:6px;}
+.kpi .delta{font-size:12px;margin-top:4px;}
+.kpi .delta.up{color:var(--danger);}
+.kpi .delta.down{color:var(--ok);}
+.kpi .delta.flat{color:var(--muted);}
+table{width:100%;border-collapse:collapse;font-size:13px;}
+th,td{padding:9px 10px;text-align:left;border-bottom:1px solid var(--border);}
+th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.02em;}
+tr:hover td{background:var(--slate-light);}
+.pill{display:inline-block;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:600;background:var(--teal-light);color:var(--teal-dark);}
+.filters{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px;}
+.filters select,.filters input{padding:8px 10px;border-radius:8px;border:1px solid var(--border);font-size:13px;background:#fff;}
+.section-title{font-size:15px;font-weight:700;margin:26px 0 12px;color:var(--slate-dark);}
+.empty{color:var(--muted);font-size:13px;padding:20px;text-align:center;}
+.view{display:none;}
+.view.active{display:block;}
+/* Modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(20,30,36,.5);display:none;align-items:center;justify-content:center;z-index:100;}
+.modal-overlay.active{display:flex;}
+.modal{background:#fff;border-radius:var(--radius);width:520px;max-width:92vw;max-height:88vh;overflow-y:auto;padding:22px 26px;}
+.modal h2{margin:0 0 16px;font-size:17px;}
+.form-row{margin-bottom:12px;}
+.form-row label{display:block;font-size:12px;font-weight:600;color:var(--slate);margin-bottom:4px;}
+.form-row input,.form-row select{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px;}
+.form-row-2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px;}
+.color-swatch{display:inline-block;width:16px;height:16px;border-radius:4px;vertical-align:middle;margin-right:6px;border:1px solid rgba(0,0,0,.1);}
+.chart-box{position:relative;height:280px;}
+.toast{position:fixed;bottom:20px;right:20px;background:var(--slate-dark);color:#fff;padding:12px 18px;border-radius:8px;font-size:13px;z-index:200;opacity:0;transition:opacity .3s;pointer-events:none;}
+.toast.show{opacity:1;}
+.company-tag{display:inline-flex;align-items:center;gap:6px;font-size:12px;}
+.logo-mini{width:20px;height:20px;border-radius:4px;object-fit:cover;background:var(--slate-light);}
+.badge-count{background:var(--slate-light);color:var(--slate-dark);border-radius:99px;padding:1px 8px;font-size:11px;margin-left:6px;}
+.help{font-size:11px;color:var(--muted);margin-top:3px;}
+.actions-cell{white-space:nowrap;}
 </style>
 </head>
 <body>
-<div class="wrap">
 
-  <header class="top">
-    <h1>Painel Mensal de Indicadores de RH</h1>
-    <span class="tag">alimente &amp; gere</span>
-  </header>
-  <p class="sub">Preencha os números do mês. O sistema busca o mês anterior salvo automaticamente, calcula variações, compara com metas e monta o relatório com recomendações.</p>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand">Indicadores<span> RH</span></div>
+    <nav>
+      <a data-view="dashboard" class="active">📊 Dashboard</a>
+      <a data-view="empresas">🏢 Empresas</a>
+      <a data-view="departamentos">🗂️ Departamentos</a>
+      <a data-view="lancamentos">🗓️ Lançamento Mensal</a>
+      <a data-view="indicadores">📈 Indicadores</a>
+      <a data-view="backup">☁️ Backup / Google Drive</a>
+    </nav>
+    <div class="foot">Sistema de Indicadores de RH · dados salvos localmente neste navegador</div>
+  </aside>
 
-  <!-- FORMULÁRIO -->
-  <section class="panel">
-    <h2>Dados do mês</h2>
-    <div class="grid">
-      <div class="field">
-        <label for="area">Área / Departamento</label>
-        <input type="text" id="area" placeholder="Ex: Operações, ou 'Empresa toda'">
+  <main class="main">
+
+    <!-- DASHBOARD -->
+    <div class="view active" id="view-dashboard">
+      <div class="topbar">
+        <div><h1>Dashboard Executivo</h1><div class="sub">Visão geral dos indicadores de RH</div></div>
+        <button class="btn" onclick="showView('lancamentos');openLancamentoModal()">+ Novo lançamento</button>
       </div>
-      <div class="field">
-        <label for="mes">Mês de referência</label>
-        <input type="month" id="mes">
+
+      <div class="filters">
+        <select id="f-empresa" onchange="onFilterEmpresaChange('f-empresa','f-depto');renderDashboard()"></select>
+        <select id="f-depto" onchange="renderDashboard()"></select>
+        <select id="f-ano" onchange="renderDashboard()"></select>
       </div>
-      <div class="field">
-        <label for="headcount">Headcount total</label>
-        <input type="number" id="headcount" placeholder="ex: 340">
+
+      <div id="dash-empty" class="empty" style="display:none;">
+        Nenhum dado cadastrado ainda. Cadastre uma empresa e lance os dados mensais para ver os indicadores aqui.
+      </div>
+
+      <div id="dash-content">
+        <div class="grid cols-4">
+          <div class="card kpi"><div class="label">Headcount atual</div><div class="value" id="kpi-headcount">–</div><div class="delta" id="kpi-headcount-delta"></div></div>
+          <div class="card kpi"><div class="label">Turnover (mês)</div><div class="value" id="kpi-turnover">–</div><div class="delta" id="kpi-turnover-delta"></div></div>
+          <div class="card kpi"><div class="label">Absenteísmo (mês)</div><div class="value" id="kpi-absenteismo">–</div><div class="delta" id="kpi-absenteismo-delta"></div></div>
+          <div class="card kpi"><div class="label">Horas extras (mês)</div><div class="value" id="kpi-he">–</div><div class="delta" id="kpi-he-delta"></div></div>
+        </div>
+
+        <div class="section-title">Evolução no ano selecionado</div>
+        <div class="grid cols-2">
+          <div class="card"><strong style="font-size:13px;color:var(--muted)">Headcount</strong><div class="chart-box"><canvas id="chart-headcount"></canvas></div></div>
+          <div class="card"><strong style="font-size:13px;color:var(--muted)">Turnover mensal (%)</strong><div class="chart-box"><canvas id="chart-turnover"></canvas></div></div>
+          <div class="card"><strong style="font-size:13px;color:var(--muted)">Absenteísmo mensal (%)</strong><div class="chart-box"><canvas id="chart-absenteismo"></canvas></div></div>
+          <div class="card"><strong style="font-size:13px;color:var(--muted)">Horas extras (h)</strong><div class="chart-box"><canvas id="chart-he"></canvas></div></div>
+        </div>
+
+        <div class="section-title">Ranking de departamentos (turnover acumulado no ano)</div>
+        <div class="card">
+          <table id="tbl-ranking"><thead><tr><th>Departamento</th><th>Empresa</th><th>Headcount</th><th>Turnover ano</th><th>Absenteísmo ano</th></tr></thead><tbody></tbody></table>
+        </div>
+
+        <div class="section-title">Últimos lançamentos</div>
+        <div class="card">
+          <table id="tbl-recentes"><thead><tr><th>Mês/Ano</th><th>Empresa</th><th>Depto</th><th>Headcount</th><th>Admissões</th><th>Demissões</th><th>H. Extras</th></tr></thead><tbody></tbody></table>
+        </div>
       </div>
     </div>
 
-    <div class="grid" style="margin-top:20px;">
-      <div class="field">
-        <label for="turnover">Turnover (%)</label>
-        <input type="number" step="0.1" id="turnover">
-        <div class="hint">meta opcional abaixo</div>
+    <!-- EMPRESAS -->
+    <div class="view" id="view-empresas">
+      <div class="topbar">
+        <div><h1>Empresas</h1><div class="sub">Cadastro das empresas/unidades</div></div>
+        <button class="btn" onclick="openEmpresaModal()">+ Nova empresa</button>
       </div>
-      <div class="field">
-        <label for="meta_turnover">Meta de turnover (%)</label>
-        <input type="number" step="0.1" id="meta_turnover" placeholder="opcional">
-      </div>
-      <div class="field">
-        <label for="absenteismo">Absenteísmo (%)</label>
-        <input type="number" step="0.1" id="absenteismo">
-      </div>
-      <div class="field">
-        <label for="meta_absenteismo">Meta de absenteísmo (%)</label>
-        <input type="number" step="0.1" id="meta_absenteismo" placeholder="opcional">
-      </div>
-      <div class="field">
-        <label for="admissoes">Admissões (nº)</label>
-        <input type="number" id="admissoes">
-      </div>
-      <div class="field">
-        <label for="desligamentos">Desligamentos (nº)</label>
-        <input type="number" id="desligamentos">
-      </div>
-      <div class="field">
-        <label for="horas_extras">Horas extras (% da jornada)</label>
-        <input type="number" step="0.1" id="horas_extras">
-      </div>
-      <div class="field">
-        <label for="meta_horas_extras">Meta de horas extras (%)</label>
-        <input type="number" step="0.1" id="meta_horas_extras" placeholder="opcional">
+      <div class="card">
+        <table id="tbl-empresas"><thead><tr><th>Nome</th><th>Razão social</th><th>CNPJ</th><th>Cidade/UF</th><th>Responsável</th><th>Cor</th><th></th></tr></thead><tbody></tbody></table>
+        <div class="empty" id="empresas-empty" style="display:none;">Nenhuma empresa cadastrada. Clique em "+ Nova empresa" para começar.</div>
       </div>
     </div>
 
-    <div class="actions">
-      <button id="btnGerar">Gerar relatório</button>
-      <button class="secondary" id="btnLimpar">Limpar campos</button>
-      <span class="status-msg" id="statusMsg"></span>
+    <!-- DEPARTAMENTOS -->
+    <div class="view" id="view-departamentos">
+      <div class="topbar">
+        <div><h1>Departamentos</h1><div class="sub">Unidades/departamentos por empresa</div></div>
+        <button class="btn" onclick="openDeptoModal()">+ Novo departamento</button>
+      </div>
+      <div class="card">
+        <table id="tbl-departamentos"><thead><tr><th>Nome</th><th>Empresa</th><th></th></tr></thead><tbody></tbody></table>
+        <div class="empty" id="departamentos-empty" style="display:none;">Nenhum departamento cadastrado ainda.</div>
+      </div>
     </div>
-  </section>
 
-  <!-- RELATÓRIO -->
-  <section class="panel" id="reportPanel" style="display:none;">
-    <h2>Relatório gerado</h2>
-    <div class="report-box" id="reportBox"></div>
-    <div class="actions">
-      <button class="secondary" id="btnCopiar">Copiar texto</button>
-      <span class="status-msg" id="copyMsg"></span>
+    <!-- LANÇAMENTOS -->
+    <div class="view" id="view-lancamentos">
+      <div class="topbar">
+        <div><h1>Lançamento Mensal</h1><div class="sub">Dados mensais por empresa e departamento</div></div>
+        <button class="btn" onclick="openLancamentoModal()">+ Novo lançamento</button>
+      </div>
+      <div class="filters">
+        <select id="lc-f-empresa" onchange="onFilterEmpresaChange('lc-f-empresa','lc-f-depto');renderLancamentos()"></select>
+        <select id="lc-f-depto" onchange="renderLancamentos()"></select>
+        <select id="lc-f-ano" onchange="renderLancamentos()"></select>
+      </div>
+      <div class="card">
+        <table id="tbl-lancamentos">
+          <thead><tr><th>Mês/Ano</th><th>Empresa</th><th>Depto</th><th>Func.</th><th>Admissões</th><th>Demissões</th><th>Faltas (dias)</th><th>Dias úteis</th><th>H. Extras</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <div class="empty" id="lancamentos-empty" style="display:none;">Nenhum lançamento cadastrado ainda.</div>
+      </div>
     </div>
-  </section>
 
-  <!-- HISTÓRICO -->
-  <section class="panel">
-    <h2>Histórico salvo</h2>
-    <div id="historyWrap"><p class="empty">Carregando...</p></div>
-  </section>
+    <!-- INDICADORES -->
+    <div class="view" id="view-indicadores">
+      <div class="topbar">
+        <div><h1>Indicadores</h1><div class="sub">Fórmulas e valores calculados automaticamente</div></div>
+      </div>
+      <div class="filters">
+        <select id="ind-f-empresa" onchange="onFilterEmpresaChange('ind-f-empresa','ind-f-depto');renderIndicadores()"></select>
+        <select id="ind-f-depto" onchange="renderIndicadores()"></select>
+        <select id="ind-f-ano" onchange="renderIndicadores()"></select>
+      </div>
+      <div class="grid cols-2">
+        <div class="card">
+          <h3 style="margin-top:0;font-size:14px;">Turnover</h3>
+          <p class="help">Turnover mensal = ((admissões + demissões) / 2) ÷ headcount médio do mês × 100.<br>Turnover anual = média dos turnovers mensais do ano selecionado.</p>
+          <table><thead><tr><th>Mês</th><th>Turnover</th></tr></thead><tbody id="tbl-ind-turnover"></tbody></table>
+        </div>
+        <div class="card">
+          <h3 style="margin-top:0;font-size:14px;">Absenteísmo</h3>
+          <p class="help">Absenteísmo mensal = dias de falta ÷ (dias úteis × headcount) × 100.</p>
+          <table><thead><tr><th>Mês</th><th>Absenteísmo</th></tr></thead><tbody id="tbl-ind-absenteismo"></tbody></table>
+        </div>
+        <div class="card">
+          <h3 style="margin-top:0;font-size:14px;">Headcount</h3>
+          <p class="help">Quantidade de funcionários informada em cada lançamento mensal.</p>
+          <table><thead><tr><th>Mês</th><th>Headcount</th></tr></thead><tbody id="tbl-ind-headcount"></tbody></table>
+        </div>
+        <div class="card">
+          <h3 style="margin-top:0;font-size:14px;">Horas extras</h3>
+          <p class="help">Total do mês e média por funcionário (total ÷ headcount).</p>
+          <table><thead><tr><th>Mês</th><th>Total</th><th>Média/func.</th></tr></thead><tbody id="tbl-ind-he"></tbody></table>
+        </div>
+      </div>
+    </div>
 
-  <footer>dados salvos apenas neste navegador, de forma privada — não são compartilhados</footer>
+    <!-- BACKUP -->
+    <div class="view" id="view-backup">
+      <div class="topbar">
+        <div><h1>Backup / Google Drive</h1><div class="sub">Sincronize seus dados com o Google Drive</div></div>
+      </div>
+      <div class="card" style="max-width:640px;">
+        <p style="font-size:13px;">Os dados deste sistema ficam salvos no navegador (localStorage). Use o Google Drive para manter uma cópia de segurança e transferir os dados para outro computador.</p>
+        <div class="form-row">
+          <label>Google Client ID (OAuth)</label>
+          <input type="text" id="gd-client-id" placeholder="xxxxxxxx.apps.googleusercontent.com">
+          <div class="help">Crie um Client ID OAuth 2.0 (tipo "Web application") no Google Cloud Console, com escopo <code>drive.file</code>, e cole aqui. Fica salvo apenas neste navegador.</div>
+        </div>
+        <button class="btn secondary" onclick="saveClientId()">Salvar Client ID</button>
+        <hr style="border:none;border-top:1px solid var(--border);margin:18px 0;">
+        <div id="gd-status" style="font-size:13px;margin-bottom:12px;color:var(--muted);">Não conectado ao Google Drive.</div>
+        <button class="btn" id="btn-gd-connect" onclick="connectGoogleDrive()">Conectar ao Google Drive</button>
+        <button class="btn secondary" id="btn-gd-backup" onclick="backupToDrive()" disabled>Fazer backup agora</button>
+        <button class="btn ghost" id="btn-gd-restore" onclick="restoreFromDrive()" disabled>Restaurar do Drive</button>
+        <hr style="border:none;border-top:1px solid var(--border);margin:18px 0;">
+        <h3 style="font-size:13px;">Backup manual (arquivo)</h3>
+        <button class="btn ghost" onclick="exportJsonFile()">Exportar dados (.json)</button>
+        <input type="file" id="import-file" accept=".json" style="display:none;" onchange="importJsonFile(event)">
+        <button class="btn ghost" onclick="document.getElementById('import-file').click()">Importar dados (.json)</button>
+      </div>
+    </div>
+
+  </main>
 </div>
 
+<!-- MODAL: Empresa -->
+<div class="modal-overlay" id="modal-empresa">
+  <div class="modal">
+    <h2 id="empresa-modal-title">Nova empresa</h2>
+    <input type="hidden" id="empresa-id">
+    <div class="form-row"><label>Nome</label><input id="empresa-nome"></div>
+    <div class="form-row"><label>Razão social</label><input id="empresa-razao"></div>
+    <div class="form-row-2">
+      <div class="form-row"><label>CNPJ</label><input id="empresa-cnpj"></div>
+      <div class="form-row"><label>Responsável</label><input id="empresa-responsavel"></div>
+    </div>
+    <div class="form-row-2">
+      <div class="form-row"><label>E-mail</label><input id="empresa-email"></div>
+      <div class="form-row"><label>Telefone</label><input id="empresa-telefone"></div>
+    </div>
+    <div class="form-row-2">
+      <div class="form-row"><label>Cidade</label><input id="empresa-cidade"></div>
+      <div class="form-row"><label>Estado</label><input id="empresa-estado" maxlength="2"></div>
+    </div>
+    <div class="form-row"><label>Endereço</label><input id="empresa-endereco"></div>
+    <div class="form-row-2">
+      <div class="form-row"><label>Cor principal</label><input type="color" id="empresa-cor1" value="#3A8C88"></div>
+      <div class="form-row"><label>Cor secundária</label><input type="color" id="empresa-cor2" value="#4A6278"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn ghost" onclick="closeModal('modal-empresa')">Cancelar</button>
+      <button class="btn" onclick="saveEmpresa()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Departamento -->
+<div class="modal-overlay" id="modal-depto">
+  <div class="modal">
+    <h2 id="depto-modal-title">Novo departamento</h2>
+    <input type="hidden" id="depto-id">
+    <div class="form-row"><label>Empresa</label><select id="depto-empresa"></select></div>
+    <div class="form-row"><label>Nome do departamento</label><input id="depto-nome" placeholder="Ex: MATRIZ, TATUAPÉ, VILA MARIANA..."></div>
+    <div class="modal-actions">
+      <button class="btn ghost" onclick="closeModal('modal-depto')">Cancelar</button>
+      <button class="btn" onclick="saveDepto()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Lançamento -->
+<div class="modal-overlay" id="modal-lancamento">
+  <div class="modal">
+    <h2 id="lancamento-modal-title">Novo lançamento mensal</h2>
+    <input type="hidden" id="lc-id">
+    <div class="form-row-2">
+      <div class="form-row"><label>Empresa</label><select id="lc-empresa" onchange="fillDeptoOptions('lc-empresa','lc-depto')"></select></div>
+      <div class="form-row"><label>Departamento</label><select id="lc-depto"></select></div>
+    </div>
+    <div class="form-row-2">
+      <div class="form-row"><label>Ano</label><input type="number" id="lc-ano" value="2026"></div>
+      <div class="form-row"><label>Mês</label>
+        <select id="lc-mes">
+          <option value="1">Janeiro</option><option value="2">Fevereiro</option><option value="3">Março</option>
+          <option value="4">Abril</option><option value="5">Maio</option><option value="6">Junho</option>
+          <option value="7">Julho</option><option value="8">Agosto</option><option value="9">Setembro</option>
+          <option value="10">Outubro</option><option value="11">Novembro</option><option value="12">Dezembro</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row-2">
+      <div class="form-row"><label>Quantidade de funcionários (headcount)</label><input type="number" id="lc-funcionarios" min="0"></div>
+      <div class="form-row"><label>Dias úteis no mês</label><input type="number" id="lc-diasuteis" min="0" value="22"></div>
+    </div>
+    <div class="form-row-2">
+      <div class="form-row"><label>Admissões</label><input type="number" id="lc-admissoes" min="0" value="0"></div>
+      <div class="form-row"><label>Demissões (total)</label><input type="number" id="lc-demissoes" min="0" value="0"></div>
+    </div>
+    <div class="form-row-2">
+      <div class="form-row"><label>Faltas (dias, soma de todos)</label><input type="number" id="lc-faltas" min="0" value="0"></div>
+      <div class="form-row"><label>Horas extras (total, horas)</label><input type="number" id="lc-he" min="0" value="0" step="0.5"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn ghost" onclick="closeModal('modal-lancamento')">Cancelar</button>
+      <button class="btn" onclick="saveLancamento()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
 <script>
-(function () {
-  const $ = (id) => document.getElementById(id);
+/* ============ ESTADO / PERSISTÊNCIA ============ */
+const STORAGE_KEY = 'rh_indicadores_data_v1';
 
-  const fields = ['area','mes','headcount','turnover','meta_turnover','absenteismo',
-                   'meta_absenteismo','admissoes','desligamentos','horas_extras','meta_horas_extras'];
+function loadData(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw) return JSON.parse(raw);
+  }catch(e){ console.error('Erro ao carregar dados', e); }
+  return { empresas: [], departamentos: [], lancamentos: [] };
+}
+let DATA = loadData();
 
-  function slug(s) {
-    return (s || 'geral').toLowerCase().trim()
-      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'geral';
+function saveData(){
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA));
+}
+
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2200);
+}
+
+/* ============ NAVEGAÇÃO ============ */
+function showView(name){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.getElementById('view-'+name).classList.add('active');
+  document.querySelectorAll('.sidebar nav a').forEach(a=>a.classList.toggle('active', a.dataset.view===name));
+  refreshAll();
+}
+document.querySelectorAll('.sidebar nav a').forEach(a=>{
+  a.addEventListener('click', ()=>showView(a.dataset.view));
+});
+
+function closeModal(id){ document.getElementById(id).classList.remove('active'); }
+function openModal(id){ document.getElementById(id).classList.add('active'); }
+
+/* ============ HELPERS DE DADOS ============ */
+function getEmpresa(id){ return DATA.empresas.find(e=>e.id===id); }
+function getDepto(id){ return DATA.departamentos.find(d=>d.id===id); }
+function deptosDaEmpresa(empresaId){ return DATA.departamentos.filter(d=>d.empresaId===empresaId); }
+const MESES = ['','Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+const MESES_EXT = ['','Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+function anosDisponiveis(){
+  const anos = new Set(DATA.lancamentos.map(l=>l.ano));
+  if(anos.size===0) anos.add(new Date().getFullYear());
+  return Array.from(anos).sort((a,b)=>b-a);
+}
+
+/* preenche <select> de empresas (com opção "todas" quando for filtro) */
+function fillEmpresaSelect(selectId, withAllOption){
+  const sel = document.getElementById(selectId);
+  const current = sel.value;
+  sel.innerHTML = '';
+  if(withAllOption){
+    const opt = document.createElement('option'); opt.value=''; opt.textContent='Todas as empresas';
+    sel.appendChild(opt);
   }
-
-  function setStatus(msg, type) {
-    const el = $('statusMsg');
-    el.textContent = msg;
-    el.className = 'status-msg' + (type ? ' ' + type : '');
-  }
-
-  async function saveEntry(entry) {
-    const key = `entries:${slug(entry.area)}:${entry.mes}`;
-    await window.storage.set(key, JSON.stringify(entry), false);
-  }
-
-  async function listEntriesForArea(areaSlug) {
-    try {
-      const res = await window.storage.list(`entries:${areaSlug}:`, false);
-      if (!res || !res.keys) return [];
-      const out = [];
-      for (const k of res.keys) {
-        try {
-          const r = await window.storage.get(k, false);
-          if (r && r.value) out.push(JSON.parse(r.value));
-        } catch (e) { /* ignore missing */ }
-      }
-      out.sort((a, b) => a.mes.localeCompare(b.mes));
-      return out;
-    } catch (e) {
-      return [];
-    }
-  }
-
-  async function listAllAreas() {
-    try {
-      const res = await window.storage.list('entries:', false);
-      if (!res || !res.keys) return [];
-      const areas = new Set();
-      res.keys.forEach(k => {
-        const parts = k.split(':');
-        if (parts.length >= 3) areas.add(parts[1]);
-      });
-      return Array.from(areas);
-    } catch (e) {
-      return [];
-    }
-  }
-
-  function pct(atual, anterior) {
-    if (anterior === null || anterior === undefined || anterior === '' || isNaN(anterior)) return null;
-    if (Number(anterior) === 0) return null;
-    return ((Number(atual) - Number(anterior)) / Math.abs(Number(anterior))) * 100;
-  }
-
-  function seta(variacao) {
-    if (variacao === null) return '(sem dado anterior)';
-    if (variacao > 2) return `▲ subiu ${variacao.toFixed(1)}%`;
-    if (variacao < -2) return `▼ caiu ${Math.abs(variacao).toFixed(1)}%`;
-    return `► estável (${variacao.toFixed(1)}%)`;
-  }
-
-  // menor é melhor (turnover, absenteismo, horas extras)
-  function severidade(atual, meta) {
-    if (meta === null || meta === undefined || meta === '' || isNaN(meta) || Number(meta) === 0) {
-      return { nivel: null, label: '' };
-    }
-    const diff = ((Number(atual) - Number(meta)) / Number(meta)) * 100;
-    if (diff <= 0) return { nivel: 'ok', label: 'dentro da meta' };
-    if (diff <= 25) return { nivel: 'warn', label: `${diff.toFixed(0)}% acima da meta` };
-    return { nivel: 'crit', label: `${diff.toFixed(0)}% acima da meta` };
-  }
-
-  function pillTxt(sev) {
-    if (!sev.nivel) return '[sem meta informada]';
-    const map = { ok: '🟢', warn: '🟡', crit: '🔴' };
-    return `${map[sev.nivel]} ${sev.label}`;
-  }
-
-  function gerarTexto(atual, anterior) {
-    const varTurnover = pct(atual.turnover, anterior ? anterior.turnover : null);
-    const varAbsent = pct(atual.absenteismo, anterior ? anterior.absenteismo : null);
-    const varHoras = pct(atual.horas_extras, anterior ? anterior.horas_extras : null);
-
-    const sevTurnover = severidade(atual.turnover, atual.meta_turnover);
-    const sevAbsent = severidade(atual.absenteismo, atual.meta_absenteismo);
-    const sevHoras = severidade(atual.horas_extras, atual.meta_horas_extras);
-
-    const saldo = (Number(atual.admissoes) || 0) - (Number(atual.desligamentos) || 0);
-
-    // cruzamentos
-    const alertas = [];
-    if (sevTurnover.nivel && sevTurnover.nivel !== 'ok' && sevAbsent.nivel && sevAbsent.nivel !== 'ok') {
-      alertas.push('Turnover e absenteísmo elevados ao mesmo tempo — possível sinal de insatisfação ou problema de clima organizacional.');
-    }
-    if (saldo < 0) {
-      alertas.push(`Desligamentos superaram admissões em ${Math.abs(saldo)} — headcount em contração. Avaliar se é planejado ou reativo.`);
-    }
-    if (sevHoras.nivel && sevHoras.nivel !== 'ok' && saldo < 0) {
-      alertas.push('Horas extras acima da meta combinadas com queda de headcount — risco de sobrecarga da equipe atual.');
-    }
-    if (alertas.length === 0) {
-      alertas.push('Nenhum cruzamento crítico identificado neste mês com os dados informados.');
-    }
-
-    // recomendações priorizadas por severidade
-    const recs = [];
-    const candidatos = [
-      { nivel: sevTurnover.nivel, texto: 'Investigar causas de saída (entrevistas de desligamento) e revisar políticas de retenção, especialmente em áreas com maior rotatividade.' },
-      { nivel: sevAbsent.nivel, texto: 'Mapear causas de ausência (saúde, clima, sobrecarga) e considerar pesquisa de clima ou conversas 1:1 com lideranças.' },
-      { nivel: sevHoras.nivel, texto: 'Revisar dimensionamento de equipe e distribuição de carga de trabalho antes que horas extras virem padrão estrutural.' },
-    ];
-    candidatos.sort((a, b) => {
-      const ordem = { crit: 0, warn: 1, ok: 2, null: 3 };
-      return (ordem[a.nivel] ?? 3) - (ordem[b.nivel] ?? 3);
-    });
-    candidatos.forEach(c => { if (c.nivel === 'crit' || c.nivel === 'warn') recs.push(c.texto); });
-    if (saldo < 0) recs.push('Reavaliar plano de contratação do próximo mês frente ao volume de desligamentos.');
-    if (recs.length === 0) recs.push('Manter monitoramento mensal; nenhum indicador exige ação imediata.');
-
-    const linhas = [];
-    linhas.push('RELATÓRIO MENSAL DE INDICADORES DE RH');
-    linhas.push(`Período: ${atual.mes} | Área: ${atual.area || 'Geral'}`);
-    linhas.push('');
-    linhas.push('RESUMO EXECUTIVO');
-    linhas.push(`Headcount atual: ${atual.headcount || 'não informado'}${anterior && anterior.headcount ? ` (mês anterior: ${anterior.headcount})` : ''}. Turnover em ${atual.turnover}%, absenteísmo em ${atual.absenteismo}%, saldo de contratações de ${saldo >= 0 ? '+' : ''}${saldo} no mês.`);
-    linhas.push('');
-    linhas.push('1. TURNOVER');
-    linhas.push(`Resultado: ${atual.turnover}% — ${seta(varTurnover)}`);
-    linhas.push(`Frente à meta: ${pillTxt(sevTurnover)}`);
-    linhas.push('');
-    linhas.push('2. ABSENTEÍSMO');
-    linhas.push(`Resultado: ${atual.absenteismo}% — ${seta(varAbsent)}`);
-    linhas.push(`Frente à meta: ${pillTxt(sevAbsent)}`);
-    linhas.push('');
-    linhas.push('3. MOVIMENTAÇÃO DE PESSOAL');
-    linhas.push(`Admissões: ${atual.admissoes} | Desligamentos: ${atual.desligamentos}`);
-    linhas.push(`Saldo do mês: ${saldo >= 0 ? '+' : ''}${saldo}`);
-    linhas.push('');
-    linhas.push('4. HORAS EXTRAS');
-    linhas.push(`Resultado: ${atual.horas_extras}% — ${seta(varHoras)}`);
-    linhas.push(`Frente à meta: ${pillTxt(sevHoras)}`);
-    linhas.push('');
-    linhas.push('CRUZAMENTOS E ALERTAS');
-    alertas.forEach(a => linhas.push(`- ${a}`));
-    linhas.push('');
-    linhas.push('RECOMENDAÇÕES DO MÊS');
-    recs.forEach((r, i) => linhas.push(`${i + 1}. ${r}`));
-
-    return linhas.join('\n');
-  }
-
-  async function renderHistory() {
-    const wrap = $('historyWrap');
-    wrap.innerHTML = '<p class="empty">Carregando...</p>';
-    const areas = await listAllAreas();
-    if (areas.length === 0) {
-      wrap.innerHTML = '<p class="empty">Nenhum registro salvo ainda. Gere o primeiro relatório acima.</p>';
-      return;
-    }
-    let html = '';
-    for (const areaSlug of areas) {
-      const entries = await listEntriesForArea(areaSlug);
-      if (entries.length === 0) continue;
-      const nomeArea = entries[0].area || areaSlug;
-      html += `<p style="font-family:var(--mono); font-size:0.78rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--ink-soft); margin:18px 0 8px;">${nomeArea}</p>`;
-      html += '<table class="history"><thead><tr><th>Mês</th><th>Turnover</th><th>Absent.</th><th>Adm.</th><th>Deslig.</th><th>H.Extra</th><th></th></tr></thead><tbody>';
-      entries.slice().reverse().forEach(e => {
-        html += `<tr>
-          <td>${e.mes}</td>
-          <td>${e.turnover}%</td>
-          <td>${e.absenteismo}%</td>
-          <td>${e.admissoes}</td>
-          <td>${e.desligamentos}</td>
-          <td>${e.horas_extras}%</td>
-          <td><button class="del-btn" data-key="entries:${areaSlug}:${e.mes}">apagar</button></td>
-        </tr>`;
-      });
-      html += '</tbody></table>';
-    }
-    wrap.innerHTML = html || '<p class="empty">Nenhum registro salvo ainda.</p>';
-
-    wrap.querySelectorAll('.del-btn').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        try {
-          await window.storage.delete(btn.dataset.key, false);
-          renderHistory();
-        } catch (e) {
-          alert('Não foi possível apagar este registro.');
-        }
-      });
-    });
-  }
-
-  async function gerar() {
-    const area = $('area').value.trim();
-    const mes = $('mes').value;
-    if (!mes) { setStatus('Informe o mês de referência.', 'err'); return; }
-
-    const atual = {
-      area, mes,
-      headcount: $('headcount').value,
-      turnover: $('turnover').value,
-      meta_turnover: $('meta_turnover').value,
-      absenteismo: $('absenteismo').value,
-      meta_absenteismo: $('meta_absenteismo').value,
-      admissoes: $('admissoes').value,
-      desligamentos: $('desligamentos').value,
-      horas_extras: $('horas_extras').value,
-      meta_horas_extras: $('meta_horas_extras').value,
-    };
-
-    if (atual.turnover === '' || atual.absenteismo === '' || atual.admissoes === '' ||
-        atual.desligamentos === '' || atual.horas_extras === '') {
-      setStatus('Preencha ao menos turnover, absenteísmo, admissões, desligamentos e horas extras.', 'err');
-      return;
-    }
-
-    setStatus('Gerando...', '');
-
-    const aSlug = slug(area);
-    const historico = await listEntriesForArea(aSlug);
-    const anteriores = historico.filter(e => e.mes < mes);
-    const anterior = anteriores.length ? anteriores[anteriores.length - 1] : null;
-
-    const texto = gerarTexto(atual, anterior);
-    $('reportBox').textContent = texto;
-    $('reportPanel').style.display = 'block';
-    $('reportPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
-
-    try {
-      await saveEntry(atual);
-      setStatus('Relatório gerado e mês salvo no histórico.', 'ok');
-      renderHistory();
-    } catch (e) {
-      setStatus('Relatório gerado, mas houve erro ao salvar no histórico.', 'err');
-    }
-  }
-
-  $('btnGerar').addEventListener('click', gerar);
-
-  $('btnLimpar').addEventListener('click', () => {
-    fields.forEach(f => { if ($(f)) $(f).value = ''; });
-    setStatus('Campos limpos.', '');
+  DATA.empresas.forEach(e=>{
+    const opt = document.createElement('option'); opt.value=e.id; opt.textContent=e.nome;
+    sel.appendChild(opt);
   });
+  if(current && [...sel.options].some(o=>o.value===current)) sel.value = current;
+}
+function fillDeptoOptions(empresaSelectId, deptoSelectId, withAllOption){
+  const empresaId = document.getElementById(empresaSelectId).value;
+  const sel = document.getElementById(deptoSelectId);
+  const current = sel.value;
+  sel.innerHTML='';
+  if(withAllOption){
+    const opt = document.createElement('option'); opt.value=''; opt.textContent='Todos os departamentos';
+    sel.appendChild(opt);
+  }
+  const list = empresaId ? deptosDaEmpresa(empresaId) : DATA.departamentos;
+  list.forEach(d=>{
+    const opt = document.createElement('option'); opt.value=d.id; opt.textContent=d.nome;
+    sel.appendChild(opt);
+  });
+  if(current && [...sel.options].some(o=>o.value===current)) sel.value = current;
+}
+function fillAnoSelect(selectId){
+  const sel = document.getElementById(selectId);
+  const current = sel.value;
+  sel.innerHTML='';
+  anosDisponiveis().forEach(a=>{
+    const opt = document.createElement('option'); opt.value=a; opt.textContent=a;
+    sel.appendChild(opt);
+  });
+  if(current && [...sel.options].some(o=>o.value===current)) sel.value = current;
+}
+function onFilterEmpresaChange(empresaSelectId, deptoSelectId){
+  fillDeptoOptions(empresaSelectId, deptoSelectId, true);
+}
 
-  $('btnCopiar').addEventListener('click', async () => {
-    try {
-      await navigator.clipboard.writeText($('reportBox').textContent);
-      $('copyMsg').textContent = 'Copiado!';
-      $('copyMsg').className = 'status-msg ok';
-      setTimeout(() => { $('copyMsg').textContent = ''; }, 2000);
-    } catch (e) {
-      $('copyMsg').textContent = 'Não foi possível copiar automaticamente — selecione o texto manualmente.';
-      $('copyMsg').className = 'status-msg err';
+function setupFilterBars(){
+  ['f','lc-f','ind-f'].forEach(prefix=>{
+    fillEmpresaSelect(prefix+'-empresa', true);
+    fillDeptoOptions(prefix+'-empresa', prefix+'-depto', true);
+    fillAnoSelect(prefix+'-ano');
+  });
+}
+
+/* ============ EMPRESAS ============ */
+function openEmpresaModal(id){
+  document.getElementById('empresa-modal-title').textContent = id ? 'Editar empresa' : 'Nova empresa';
+  document.getElementById('empresa-id').value = id || '';
+  const e = id ? getEmpresa(id) : null;
+  document.getElementById('empresa-nome').value = e ? e.nome : '';
+  document.getElementById('empresa-razao').value = e ? e.razaoSocial : '';
+  document.getElementById('empresa-cnpj').value = e ? e.cnpj : '';
+  document.getElementById('empresa-responsavel').value = e ? e.responsavel : '';
+  document.getElementById('empresa-email').value = e ? e.email : '';
+  document.getElementById('empresa-telefone').value = e ? e.telefone : '';
+  document.getElementById('empresa-cidade').value = e ? e.cidade : '';
+  document.getElementById('empresa-estado').value = e ? e.estado : '';
+  document.getElementById('empresa-endereco').value = e ? e.endereco : '';
+  document.getElementById('empresa-cor1').value = e ? e.cor1 : '#3A8C88';
+  document.getElementById('empresa-cor2').value = e ? e.cor2 : '#4A6278';
+  openModal('modal-empresa');
+}
+function saveEmpresa(){
+  const id = document.getElementById('empresa-id').value || uid();
+  const nome = document.getElementById('empresa-nome').value.trim();
+  if(!nome){ toast('Informe o nome da empresa'); return; }
+  const obj = {
+    id, nome,
+    razaoSocial: document.getElementById('empresa-razao').value.trim(),
+    cnpj: document.getElementById('empresa-cnpj').value.trim(),
+    responsavel: document.getElementById('empresa-responsavel').value.trim(),
+    email: document.getElementById('empresa-email').value.trim(),
+    telefone: document.getElementById('empresa-telefone').value.trim(),
+    cidade: document.getElementById('empresa-cidade').value.trim(),
+    estado: document.getElementById('empresa-estado').value.trim().toUpperCase(),
+    endereco: document.getElementById('empresa-endereco').value.trim(),
+    cor1: document.getElementById('empresa-cor1').value,
+    cor2: document.getElementById('empresa-cor2').value,
+  };
+  const idx = DATA.empresas.findIndex(e=>e.id===id);
+  if(idx>=0) DATA.empresas[idx]=obj; else DATA.empresas.push(obj);
+  saveData();
+  closeModal('modal-empresa');
+  toast('Empresa salva');
+  refreshAll();
+}
+function deleteEmpresa(id){
+  if(!confirm('Excluir esta empresa? Departamentos e lançamentos vinculados também serão removidos.')) return;
+  const deptoIds = deptosDaEmpresa(id).map(d=>d.id);
+  DATA.empresas = DATA.empresas.filter(e=>e.id!==id);
+  DATA.departamentos = DATA.departamentos.filter(d=>d.empresaId!==id);
+  DATA.lancamentos = DATA.lancamentos.filter(l=>!deptoIds.includes(l.departamentoId));
+  saveData();
+  toast('Empresa removida');
+  refreshAll();
+}
+function renderEmpresas(){
+  const tbody = document.querySelector('#tbl-empresas tbody');
+  tbody.innerHTML='';
+  document.getElementById('empresas-empty').style.display = DATA.empresas.length ? 'none':'block';
+  DATA.empresas.forEach(e=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${escapeHtml(e.nome)}</td>
+      <td>${escapeHtml(e.razaoSocial||'-')}</td>
+      <td>${escapeHtml(e.cnpj||'-')}</td>
+      <td>${escapeHtml(e.cidade||'-')}${e.estado?'/'+escapeHtml(e.estado):''}</td>
+      <td>${escapeHtml(e.responsavel||'-')}</td>
+      <td><span class="color-swatch" style="background:${e.cor1}"></span><span class="color-swatch" style="background:${e.cor2}"></span></td>
+      <td class="actions-cell">
+        <button class="btn small ghost" onclick="openEmpresaModal('${e.id}')">Editar</button>
+        <button class="btn small danger" onclick="deleteEmpresa('${e.id}')">Excluir</button>
+      </td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+/* ============ DEPARTAMENTOS ============ */
+function openDeptoModal(id){
+  document.getElementById('depto-modal-title').textContent = id ? 'Editar departamento' : 'Novo departamento';
+  document.getElementById('depto-id').value = id || '';
+  fillEmpresaSelect('depto-empresa', false);
+  const d = id ? getDepto(id) : null;
+  document.getElementById('depto-nome').value = d ? d.nome : '';
+  if(d) document.getElementById('depto-empresa').value = d.empresaId;
+  if(DATA.empresas.length===0){ toast('Cadastre uma empresa antes'); return; }
+  openModal('modal-depto');
+}
+function saveDepto(){
+  const id = document.getElementById('depto-id').value || uid();
+  const nome = document.getElementById('depto-nome').value.trim();
+  const empresaId = document.getElementById('depto-empresa').value;
+  if(!nome || !empresaId){ toast('Preencha empresa e nome do departamento'); return; }
+  const obj = { id, nome, empresaId };
+  const idx = DATA.departamentos.findIndex(d=>d.id===id);
+  if(idx>=0) DATA.departamentos[idx]=obj; else DATA.departamentos.push(obj);
+  saveData();
+  closeModal('modal-depto');
+  toast('Departamento salvo');
+  refreshAll();
+}
+function deleteDepto(id){
+  if(!confirm('Excluir este departamento? Lançamentos vinculados também serão removidos.')) return;
+  DATA.departamentos = DATA.departamentos.filter(d=>d.id!==id);
+  DATA.lancamentos = DATA.lancamentos.filter(l=>l.departamentoId!==id);
+  saveData();
+  toast('Departamento removido');
+  refreshAll();
+}
+function renderDepartamentos(){
+  const tbody = document.querySelector('#tbl-departamentos tbody');
+  tbody.innerHTML='';
+  document.getElementById('departamentos-empty').style.display = DATA.departamentos.length ? 'none':'block';
+  DATA.departamentos.forEach(d=>{
+    const emp = getEmpresa(d.empresaId);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${escapeHtml(d.nome)}</td>
+      <td>${emp? escapeHtml(emp.nome) : '<em>empresa removida</em>'}</td>
+      <td class="actions-cell">
+        <button class="btn small ghost" onclick="openDeptoModal('${d.id}')">Editar</button>
+        <button class="btn small danger" onclick="deleteDepto('${d.id}')">Excluir</button>
+      </td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+/* ============ LANÇAMENTOS ============ */
+function openLancamentoModal(id){
+  document.getElementById('lancamento-modal-title').textContent = id ? 'Editar lançamento' : 'Novo lançamento mensal';
+  document.getElementById('lc-id').value = id || '';
+  fillEmpresaSelect('lc-empresa', false);
+  if(DATA.empresas.length===0){ toast('Cadastre uma empresa antes'); return; }
+  fillDeptoOptions('lc-empresa','lc-depto', false);
+  const l = id ? DATA.lancamentos.find(x=>x.id===id) : null;
+  if(l){
+    document.getElementById('lc-empresa').value = getDepto(l.departamentoId)?.empresaId || '';
+    fillDeptoOptions('lc-empresa','lc-depto', false);
+    document.getElementById('lc-depto').value = l.departamentoId;
+    document.getElementById('lc-ano').value = l.ano;
+    document.getElementById('lc-mes').value = l.mes;
+    document.getElementById('lc-funcionarios').value = l.funcionarios;
+    document.getElementById('lc-diasuteis').value = l.diasUteis;
+    document.getElementById('lc-admissoes').value = l.admissoes;
+    document.getElementById('lc-demissoes').value = l.demissoes;
+    document.getElementById('lc-faltas').value = l.faltas;
+    document.getElementById('lc-he').value = l.horasExtras;
+  } else {
+    document.getElementById('lc-ano').value = new Date().getFullYear();
+    document.getElementById('lc-mes').value = new Date().getMonth()+1;
+    document.getElementById('lc-funcionarios').value = '';
+    document.getElementById('lc-diasuteis').value = 22;
+    document.getElementById('lc-admissoes').value = 0;
+    document.getElementById('lc-demissoes').value = 0;
+    document.getElementById('lc-faltas').value = 0;
+    document.getElementById('lc-he').value = 0;
+  }
+  openModal('modal-lancamento');
+}
+function saveLancamento(){
+  const id = document.getElementById('lc-id').value || uid();
+  const departamentoId = document.getElementById('lc-depto').value;
+  const ano = parseInt(document.getElementById('lc-ano').value);
+  const mes = parseInt(document.getElementById('lc-mes').value);
+  const funcionarios = parseFloat(document.getElementById('lc-funcionarios').value)||0;
+  if(!departamentoId){ toast('Selecione empresa e departamento'); return; }
+  if(!funcionarios){ toast('Informe a quantidade de funcionários'); return; }
+  const obj = {
+    id, departamentoId, ano, mes, funcionarios,
+    diasUteis: parseFloat(document.getElementById('lc-diasuteis').value)||0,
+    admissoes: parseFloat(document.getElementById('lc-admissoes').value)||0,
+    demissoes: parseFloat(document.getElementById('lc-demissoes').value)||0,
+    faltas: parseFloat(document.getElementById('lc-faltas').value)||0,
+    horasExtras: parseFloat(document.getElementById('lc-he').value)||0,
+  };
+  const dupe = DATA.lancamentos.find(l=>l.id!==id && l.departamentoId===departamentoId && l.ano===ano && l.mes===mes);
+  if(dupe && !confirm('Já existe um lançamento para este departamento neste mês/ano. Deseja sobrescrevê-lo?')) return;
+  if(dupe){ DATA.lancamentos = DATA.lancamentos.filter(l=>l.id!==dupe.id); }
+  const idx = DATA.lancamentos.findIndex(l=>l.id===id);
+  if(idx>=0) DATA.lancamentos[idx]=obj; else DATA.lancamentos.push(obj);
+  saveData();
+  closeModal('modal-lancamento');
+  toast('Lançamento salvo');
+  refreshAll();
+}
+function deleteLancamento(id){
+  if(!confirm('Excluir este lançamento?')) return;
+  DATA.lancamentos = DATA.lancamentos.filter(l=>l.id!==id);
+  saveData();
+  toast('Lançamento removido');
+  refreshAll();
+}
+function filteredLancamentos(empresaId, deptoId, ano){
+  return DATA.lancamentos.filter(l=>{
+    const d = getDepto(l.departamentoId);
+    if(!d) return false;
+    if(empresaId && d.empresaId!==empresaId) return false;
+    if(deptoId && l.departamentoId!==deptoId) return false;
+    if(ano && l.ano!==parseInt(ano)) return false;
+    return true;
+  }).sort((a,b)=> a.ano-b.ano || a.mes-b.mes);
+}
+function renderLancamentos(){
+  const empresaId = document.getElementById('lc-f-empresa').value;
+  const deptoId = document.getElementById('lc-f-depto').value;
+  const ano = document.getElementById('lc-f-ano').value;
+  const list = filteredLancamentos(empresaId, deptoId, ano).sort((a,b)=> b.ano-a.ano || b.mes-a.mes);
+  const tbody = document.querySelector('#tbl-lancamentos tbody');
+  tbody.innerHTML='';
+  document.getElementById('lancamentos-empty').style.display = list.length ? 'none':'block';
+  list.forEach(l=>{
+    const d = getDepto(l.departamentoId);
+    const e = d ? getEmpresa(d.empresaId) : null;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${MESES[l.mes]}/${l.ano}</td>
+      <td>${e?escapeHtml(e.nome):'-'}</td>
+      <td>${d?escapeHtml(d.nome):'-'}</td>
+      <td>${l.funcionarios}</td>
+      <td>${l.admissoes}</td>
+      <td>${l.demissoes}</td>
+      <td>${l.faltas}</td>
+      <td>${l.diasUteis}</td>
+      <td>${l.horasExtras}</td>
+      <td class="actions-cell">
+        <button class="btn small ghost" onclick="openLancamentoModal('${l.id}')">Editar</button>
+        <button class="btn small danger" onclick="deleteLancamento('${l.id}')">Excluir</button>
+      </td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+/* ============ CÁLCULOS DE INDICADORES ============ */
+// Turnover mensal (%) = ((admissões + demissões)/2) / headcount médio * 100
+// headcount médio = média entre o headcount do mês e do mês anterior (mesmo depto), se existir
+function turnoverMensal(l, listaOrdenada){
+  const idx = listaOrdenada.findIndex(x=>x.id===l.id);
+  const anterior = idx>0 ? listaOrdenada[idx-1] : null;
+  const hcMedio = anterior ? (anterior.funcionarios + l.funcionarios)/2 : l.funcionarios;
+  if(!hcMedio) return 0;
+  return ((l.admissoes + l.demissoes)/2) / hcMedio * 100;
+}
+function absenteismoMensal(l){
+  const possiveis = l.diasUteis * l.funcionarios;
+  if(!possiveis) return 0;
+  return (l.faltas / possiveis) * 100;
+}
+function heMediaMensal(l){
+  if(!l.funcionarios) return 0;
+  return l.horasExtras / l.funcionarios;
+}
+// agrega uma lista de lançamentos (já filtrada e ordenada) por mês, considerando múltiplos departamentos somados
+function agregarPorMes(lancamentos){
+  const porMes = {}; // mes -> {funcionarios, admissoes, demissoes, faltas, diasUteisMax, horasExtras}
+  lancamentos.forEach(l=>{
+    if(!porMes[l.mes]) porMes[l.mes] = {mes:l.mes, funcionarios:0, admissoes:0, demissoes:0, faltas:0, diasUteis:0, horasExtras:0, count:0};
+    const m = porMes[l.mes];
+    m.funcionarios += l.funcionarios;
+    m.admissoes += l.admissoes;
+    m.demissoes += l.demissoes;
+    m.faltas += l.faltas;
+    m.diasUteis = Math.max(m.diasUteis, l.diasUteis);
+    m.horasExtras += l.horasExtras;
+    m.count++;
+  });
+  return Object.values(porMes).sort((a,b)=>a.mes-b.mes);
+}
+
+/* ============ DASHBOARD ============ */
+let charts = {};
+function destroyChart(key){ if(charts[key]){ charts[key].destroy(); delete charts[key]; } }
+
+function renderDashboard(){
+  const empresaId = document.getElementById('f-empresa').value;
+  const deptoId = document.getElementById('f-depto').value;
+  const ano = document.getElementById('f-ano').value;
+
+  const hasAny = DATA.lancamentos.length>0;
+  document.getElementById('dash-empty').style.display = hasAny ? 'none':'block';
+  document.getElementById('dash-content').style.display = hasAny ? 'block':'none';
+  if(!hasAny) return;
+
+  const doAno = filteredLancamentos(empresaId, deptoId, ano);
+  const agregados = agregarPorMes(doAno);
+
+  // KPIs do último mês disponível
+  const ultimo = agregados[agregados.length-1];
+  const penultimo = agregados[agregados.length-2];
+  const listaOrdCompleta = filteredLancamentos(empresaId, deptoId, null); // para cálculo de turnover com mês anterior (mesmo depto)
+
+  if(ultimo){
+    document.getElementById('kpi-headcount').textContent = ultimo.funcionarios.toLocaleString('pt-BR');
+    const turnoverUltimo = agregados.length ? avgTurnoverForMonth(doAno, ultimo.mes, ano) : 0;
+    document.getElementById('kpi-turnover').textContent = turnoverUltimo.toFixed(1)+'%';
+    const absUltimo = ultimo.diasUteis? (ultimo.faltas/(ultimo.diasUteis*ultimo.funcionarios || 1)*100):0;
+    document.getElementById('kpi-absenteismo').textContent = absUltimo.toFixed(1)+'%';
+    document.getElementById('kpi-he').textContent = ultimo.horasExtras.toLocaleString('pt-BR')+'h';
+
+    if(penultimo){
+      setDelta('kpi-headcount-delta', ultimo.funcionarios - penultimo.funcionarios, 'un.', false);
+      const turnoverAnt = avgTurnoverForMonth(doAno, penultimo.mes, ano);
+      setDelta('kpi-turnover-delta', turnoverUltimo - turnoverAnt, 'p.p.', true);
+      const absAnt = penultimo.diasUteis? (penultimo.faltas/(penultimo.diasUteis*penultimo.funcionarios||1)*100):0;
+      setDelta('kpi-absenteismo-delta', absUltimo - absAnt, 'p.p.', true);
+      setDelta('kpi-he-delta', ultimo.horasExtras - penultimo.horasExtras, 'h', true);
+    } else {
+      ['kpi-headcount-delta','kpi-turnover-delta','kpi-absenteismo-delta','kpi-he-delta'].forEach(id=>document.getElementById(id).textContent='');
+    }
+  }
+
+  // Gráficos
+  const labels = agregados.map(m=>MESES[m.mes]);
+  const headcountData = agregados.map(m=>m.funcionarios);
+  const turnoverData = agregados.map(m=>avgTurnoverForMonth(doAno, m.mes, ano));
+  const absData = agregados.map(m=> m.diasUteis? (m.faltas/(m.diasUteis*m.funcionarios||1)*100) : 0);
+  const heData = agregados.map(m=>m.horasExtras);
+
+  drawLineChart('chart-headcount', labels, headcountData, 'Headcount', '#3A8C88');
+  drawLineChart('chart-turnover', labels, turnoverData, 'Turnover %', '#C6564F');
+  drawLineChart('chart-absenteismo', labels, absData, 'Absenteísmo %', '#C98A2E');
+  drawBarChart('chart-he', labels, heData, 'Horas extras', '#4A6278');
+
+  renderRanking(ano);
+  renderRecentes();
+}
+
+function avgTurnoverForMonth(doAnoLancamentos, mes, ano){
+  // turnover médio (não ponderado) entre os departamentos que têm lançamento naquele mês
+  const doMes = doAnoLancamentos.filter(l=>l.mes===mes);
+  if(!doMes.length) return 0;
+  const porDepto = {};
+  doMes.forEach(l=>{ if(!porDepto[l.departamentoId]) porDepto[l.departamentoId]=[]; porDepto[l.departamentoId].push(l); });
+  let total=0, n=0;
+  Object.keys(porDepto).forEach(dId=>{
+    const listaDepto = DATA.lancamentos.filter(l=>l.departamentoId===dId).sort((a,b)=>a.ano-b.ano||a.mes-b.mes);
+    const l = porDepto[dId].find(x=>x.ano===parseInt(ano)||!ano);
+    if(l){ total += turnoverMensal(l, listaDepto); n++; }
+  });
+  return n? total/n : 0;
+}
+
+function setDelta(id, diff, unit, higherIsBad){
+  const el = document.getElementById(id);
+  const rounded = Math.round(diff*10)/10;
+  if(rounded===0){ el.textContent='sem variação'; el.className='delta flat'; return; }
+  const sign = rounded>0?'+':'';
+  el.textContent = `${sign}${rounded} ${unit} vs mês anterior`;
+  el.className = 'delta ' + ((rounded>0)===higherIsBad ? 'up':'down');
+}
+
+function drawLineChart(canvasId, labels, data, label, color){
+  destroyChart(canvasId);
+  const ctx = document.getElementById(canvasId).getContext('2d');
+  charts[canvasId] = new Chart(ctx, {
+    type:'line',
+    data:{ labels, datasets:[{ label, data, borderColor:color, backgroundColor:color+'22', tension:.3, fill:true, pointRadius:3 }] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true}} }
+  });
+}
+function drawBarChart(canvasId, labels, data, label, color){
+  destroyChart(canvasId);
+  const ctx = document.getElementById(canvasId).getContext('2d');
+  charts[canvasId] = new Chart(ctx, {
+    type:'bar',
+    data:{ labels, datasets:[{ label, data, backgroundColor:color }] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true}} }
+  });
+}
+
+function renderRanking(ano){
+  const tbody = document.querySelector('#tbl-ranking tbody');
+  tbody.innerHTML='';
+  const rows = DATA.departamentos.map(d=>{
+    const lancsDepto = filteredLancamentos(null, d.id, ano).sort((a,b)=>a.mes-b.mes);
+    if(!lancsDepto.length) return null;
+    const emp = getEmpresa(d.empresaId);
+    const turnoverAno = lancsDepto.reduce((s,l)=>s+turnoverMensal(l, lancsDepto),0)/lancsDepto.length;
+    const absAno = lancsDepto.reduce((s,l)=>s+absenteismoMensal(l),0)/lancsDepto.length;
+    const ultimoHc = lancsDepto[lancsDepto.length-1].funcionarios;
+    return { nome:d.nome, empresa: emp?emp.nome:'-', hc:ultimoHc, turnover:turnoverAno, abs:absAno };
+  }).filter(Boolean).sort((a,b)=>b.turnover-a.turnover);
+
+  if(!rows.length){ tbody.innerHTML = '<tr><td colspan="5" class="empty">Sem dados suficientes</td></tr>'; return; }
+  rows.forEach(r=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${escapeHtml(r.nome)}</td><td>${escapeHtml(r.empresa)}</td><td>${r.hc}</td><td>${r.turnover.toFixed(1)}%</td><td>${r.abs.toFixed(1)}%</td>`;
+    tbody.appendChild(tr);
+  });
+}
+function renderRecentes(){
+  const tbody = document.querySelector('#tbl-recentes tbody');
+  tbody.innerHTML='';
+  const list = [...DATA.lancamentos].sort((a,b)=> b.ano-a.ano || b.mes-a.mes).slice(0,8);
+  if(!list.length){ tbody.innerHTML = '<tr><td colspan="7" class="empty">Sem lançamentos</td></tr>'; return; }
+  list.forEach(l=>{
+    const d = getDepto(l.departamentoId);
+    const e = d? getEmpresa(d.empresaId):null;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${MESES[l.mes]}/${l.ano}</td><td>${e?escapeHtml(e.nome):'-'}</td><td>${d?escapeHtml(d.nome):'-'}</td><td>${l.funcionarios}</td><td>${l.admissoes}</td><td>${l.demissoes}</td><td>${l.horasExtras}h</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+/* ============ PÁGINA DE INDICADORES ============ */
+function renderIndicadores(){
+  const empresaId = document.getElementById('ind-f-empresa').value;
+  const deptoId = document.getElementById('ind-f-depto').value;
+  const ano = document.getElementById('ind-f-ano').value;
+  const lista = filteredLancamentos(empresaId, deptoId, ano);
+  const agregados = agregarPorMes(lista);
+
+  const tbTurnover = document.getElementById('tbl-ind-turnover'); tbTurnover.innerHTML='';
+  const tbAbs = document.getElementById('tbl-ind-absenteismo'); tbAbs.innerHTML='';
+  const tbHc = document.getElementById('tbl-ind-headcount'); tbHc.innerHTML='';
+  const tbHe = document.getElementById('tbl-ind-he'); tbHe.innerHTML='';
+
+  if(!agregados.length){
+    [tbTurnover,tbAbs,tbHc,tbHe].forEach(t=>t.innerHTML='<tr><td colspan="3" class="empty">Sem dados</td></tr>');
+    return;
+  }
+
+  agregados.forEach(m=>{
+    const turnover = avgTurnoverForMonth(lista, m.mes, ano);
+    const abs = m.diasUteis? (m.faltas/(m.diasUteis*m.funcionarios||1)*100):0;
+    const heMedia = m.funcionarios? m.horasExtras/m.funcionarios : 0;
+
+    tbTurnover.innerHTML += `<tr><td>${MESES_EXT[m.mes]}</td><td>${turnover.toFixed(1)}%</td></tr>`;
+    tbAbs.innerHTML += `<tr><td>${MESES_EXT[m.mes]}</td><td>${abs.toFixed(1)}%</td></tr>`;
+    tbHc.innerHTML += `<tr><td>${MESES_EXT[m.mes]}</td><td>${m.funcionarios}</td></tr>`;
+    tbHe.innerHTML += `<tr><td>${MESES_EXT[m.mes]}</td><td>${m.horasExtras}h</td><td>${heMedia.toFixed(1)}h</td></tr>`;
+  });
+}
+
+/* ============ BACKUP / GOOGLE DRIVE ============ */
+const GD_CLIENT_KEY = 'rh_gd_client_id';
+const GD_FILE_NAME = 'indicadores-rh-backup.json';
+let gdTokenClient = null;
+let gdAccessToken = null;
+let gdFileId = null;
+
+function saveClientId(){
+  const val = document.getElementById('gd-client-id').value.trim();
+  if(!val){ toast('Informe um Client ID'); return; }
+  localStorage.setItem(GD_CLIENT_KEY, val);
+  toast('Client ID salvo');
+  initGoogleClient();
+}
+function loadClientId(){
+  const val = localStorage.getItem(GD_CLIENT_KEY) || '';
+  document.getElementById('gd-client-id').value = val;
+  return val;
+}
+function initGoogleClient(){
+  const clientId = loadClientId();
+  if(!clientId || typeof google === 'undefined' || !google.accounts) return;
+  gdTokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: clientId,
+    scope: 'https://www.googleapis.com/auth/drive.file',
+    callback: (resp)=>{
+      if(resp.error){ toast('Erro ao conectar: '+resp.error); return; }
+      gdAccessToken = resp.access_token;
+      document.getElementById('gd-status').textContent = 'Conectado ao Google Drive.';
+      document.getElementById('btn-gd-backup').disabled = false;
+      document.getElementById('btn-gd-restore').disabled = false;
+      toast('Conectado ao Google Drive');
     }
   });
+}
+function connectGoogleDrive(){
+  const clientId = loadClientId();
+  if(!clientId){ toast('Informe e salve o Client ID primeiro'); return; }
+  if(!gdTokenClient) initGoogleClient();
+  if(gdTokenClient) gdTokenClient.requestAccessToken();
+  else toast('Aguarde o Google carregar e tente novamente');
+}
+async function findExistingBackupFile(){
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=name='${GD_FILE_NAME}'&spaces=drive&fields=files(id,name)`,{
+    headers:{ Authorization: 'Bearer '+gdAccessToken }
+  });
+  const json = await res.json();
+  if(json.files && json.files.length) return json.files[0].id;
+  return null;
+}
+async function backupToDrive(){
+  if(!gdAccessToken){ toast('Conecte-se ao Google Drive primeiro'); return; }
+  try{
+    if(!gdFileId) gdFileId = await findExistingBackupFile();
+    const content = JSON.stringify(DATA, null, 2);
+    const metadata = { name: GD_FILE_NAME, mimeType: 'application/json' };
+    const boundary = '-------rhindic' + uid();
+    const body =
+      `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n` +
+      `--${boundary}\r\nContent-Type: application/json\r\n\r\n${content}\r\n--${boundary}--`;
+    const url = gdFileId
+      ? `https://www.googleapis.com/upload/drive/v3/files/${gdFileId}?uploadType=multipart`
+      : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart`;
+    const res = await fetch(url, {
+      method: gdFileId ? 'PATCH':'POST',
+      headers: { Authorization:'Bearer '+gdAccessToken, 'Content-Type':`multipart/related; boundary=${boundary}` },
+      body
+    });
+    const json = await res.json();
+    if(json.id){ gdFileId = json.id; toast('Backup enviado ao Google Drive'); }
+    else { toast('Erro ao enviar backup'); console.error(json); }
+  }catch(e){ console.error(e); toast('Erro ao enviar backup'); }
+}
+async function restoreFromDrive(){
+  if(!gdAccessToken){ toast('Conecte-se ao Google Drive primeiro'); return; }
+  if(!confirm('Isso substituirá todos os dados atuais pelos dados do backup no Drive. Continuar?')) return;
+  try{
+    if(!gdFileId) gdFileId = await findExistingBackupFile();
+    if(!gdFileId){ toast('Nenhum backup encontrado no Drive'); return; }
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files/${gdFileId}?alt=media`,{
+      headers:{ Authorization:'Bearer '+gdAccessToken }
+    });
+    const json = await res.json();
+    DATA = json;
+    saveData();
+    toast('Dados restaurados do Google Drive');
+    refreshAll();
+  }catch(e){ console.error(e); toast('Erro ao restaurar backup'); }
+}
 
-  renderHistory();
-})();
+/* Backup manual via arquivo, sem depender do Google */
+function exportJsonFile(){
+  const blob = new Blob([JSON.stringify(DATA, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'indicadores-rh-backup.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+function importJsonFile(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    try{
+      const json = JSON.parse(reader.result);
+      if(!json.empresas || !json.departamentos || !json.lancamentos) throw new Error('formato inválido');
+      if(!confirm('Isso substituirá todos os dados atuais pelos dados do arquivo. Continuar?')) return;
+      DATA = json;
+      saveData();
+      toast('Dados importados');
+      refreshAll();
+    }catch(e){ toast('Arquivo inválido'); console.error(e); }
+  };
+  reader.readAsText(file);
+}
+
+/* ============ UTIL ============ */
+function escapeHtml(str){
+  if(str===undefined||str===null) return '';
+  return String(str).replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+
+/* ============ REFRESH GERAL ============ */
+function refreshAll(){
+  setupFilterBars();
+  renderEmpresas();
+  renderDepartamentos();
+  renderLancamentos();
+  renderIndicadores();
+  renderDashboard();
+}
+
+/* ============ INIT ============ */
+window.addEventListener('load', ()=>{
+  loadClientId();
+  setTimeout(initGoogleClient, 800);
+  refreshAll();
+});
 </script>
 </body>
 </html>
