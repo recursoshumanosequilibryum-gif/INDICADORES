@@ -1245,18 +1245,19 @@ function hhmmToDecimal(str){
 }
 
 // Agrupa itens de texto do PDF (com posição x/y) em linhas visuais, ordenadas de cima para baixo
-function groupTextIntoRows(items){
+function groupTextIntoRows(items, viewport){
   const clusters = [];
   items.forEach(it=>{
     if(!it.str || !it.str.trim()) return;
-    const y = Math.round(it.transform[5]);
+    const tx = pdfjsLib.Util.transform(viewport.transform, it.transform);
+    const x = tx[4], y = tx[5];
     let cluster = clusters.find(c=>Math.abs(c.y-y)<=3);
     if(!cluster){ cluster = {y, items:[]}; clusters.push(cluster); }
-    cluster.items.push(it);
+    cluster.items.push({str: it.str, x});
   });
-  clusters.sort((a,b)=>b.y-a.y);
+  clusters.sort((a,b)=>a.y-b.y); // no espaço do viewport, y menor = mais próximo do topo
   return clusters.map(c=>{
-    c.items.sort((a,b)=>a.transform[4]-b.transform[4]);
+    c.items.sort((a,b)=>a.x-b.x);
     return c.items.map(i=>i.str).join(' ').replace(/\s+/g,' ').trim();
   }).filter(line=>line.length>0);
 }
@@ -1360,8 +1361,9 @@ async function handlePdfUpload(event){
     let allLines = [];
     for(let p=1;p<=pdf.numPages;p++){
       const page = await pdf.getPage(p);
+      const viewport = page.getViewport({ scale: 1 });
       const content = await page.getTextContent();
-      allLines.push(...groupTextIntoRows(content.items));
+      allLines.push(...groupTextIntoRows(content.items, viewport));
     }
     const groups = parseAbsenteeismoLines(allLines);
     if(!groups.length){
