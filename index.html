@@ -7,6 +7,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.3/chart.umd.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PptxGenJS/3.12.0/pptxgen.bundle.js"></script>
 <style>
 :root{
   --teal:#3A8C88;
@@ -275,6 +276,7 @@ tr:hover td{background:var(--slate-light);}
     <div class="view" id="view-indicadores">
       <div class="topbar">
         <div><h1>Indicadores</h1><div class="sub">Fórmulas e valores calculados automaticamente</div></div>
+        <button class="btn secondary" onclick="exportIndicadoresPptx()">📊 Exportar apresentação (PPTX)</button>
       </div>
       <div class="filters">
         <select id="ind-f-empresa" onchange="renderIndicadores()"></select>
@@ -1100,6 +1102,133 @@ function renderIndicadores(){
     tbHc.innerHTML += `<tr><td>${MESES_EXT[m.mes]}</td><td>${m.funcionarios}</td></tr>`;
     tbHe.innerHTML += `<tr><td>${MESES_EXT[m.mes]}</td><td>${m.horasExtras}h</td><td>${heMedia.toFixed(1)}h</td><td>${heValorFmt}</td></tr>`;
   });
+}
+
+/* ============ EXPORTAR APRESENTAÇÃO (PPTX) ============ */
+function exportIndicadoresPptx(){
+  if(typeof PptxGenJS === 'undefined'){ toast('Biblioteca de apresentação não carregou. Verifique sua conexão.'); return; }
+  const empresaId = document.getElementById('ind-f-empresa').value;
+  const deptoId = document.getElementById('ind-f-depto').value;
+  const ano = document.getElementById('ind-f-ano').value;
+  const lista = filteredLancamentos(empresaId, deptoId, ano);
+  const agregados = agregarPorMes(lista);
+  if(!agregados.length){ toast('Não há dados para exportar com os filtros atuais'); return; }
+
+  const empresa = empresaId ? getEmpresa(empresaId) : null;
+  const departamento = deptoId ? getDepto(deptoId) : null;
+  const corPrincipal = (empresa && empresa.cor1) ? empresa.cor1.replace('#','') : '3A8C88';
+  const corSecundaria = (empresa && empresa.cor2) ? empresa.cor2.replace('#','') : '4A6278';
+  const tituloEmpresa = empresa ? empresa.nome : 'Todas as empresas';
+  const tituloDepto = departamento ? departamento.nome : 'Todos os departamentos';
+  const anoTitulo = ano || 'Todos os anos';
+
+  const pptx = new PptxGenJS();
+  pptx.defineSlideMaster({
+    title: 'MASTER',
+    background: { color: 'FFFFFF' },
+  });
+
+  // slide 1 — capa
+  let slide = pptx.addSlide();
+  slide.background = { color: corSecundaria };
+  slide.addText('Indicadores de RH', { x:0.5, y:2.1, w:9, h:1, fontSize:36, bold:true, color:'FFFFFF', fontFace:'Arial' });
+  slide.addText(`${tituloEmpresa} · ${tituloDepto}`, { x:0.5, y:3.0, w:9, h:0.6, fontSize:20, color:'FFFFFF', fontFace:'Arial' });
+  slide.addText(`Período: ${anoTitulo}`, { x:0.5, y:3.6, w:9, h:0.5, fontSize:16, color:'FFFFFF', fontFace:'Arial' });
+  slide.addText(`Gerado em ${new Date().toLocaleDateString('pt-BR')}`, { x:0.5, y:6.9, w:9, h:0.4, fontSize:11, color:'FFFFFF' });
+
+  // slide 2 — KPIs
+  const ultimo = agregados[agregados.length-1];
+  const turnoverAno = agregados.reduce((s,m)=>s+avgTurnoverForMonth(lista,m.mes,ano),0)/agregados.length;
+  const absAno = agregados.reduce((s,m)=>s+absenteismoFromAgg(m),0)/agregados.length;
+  const totalHE = agregados.reduce((s,m)=>s+m.horasExtras,0);
+  const totalHEValor = agregados.reduce((s,m)=>s+(m.horasExtrasValor||0),0);
+  slide = pptx.addSlide();
+  slide.addText('Resumo dos indicadores', { x:0.4, y:0.3, w:9, h:0.6, fontSize:24, bold:true, color:corSecundaria });
+  const kpis = [
+    { label:'Headcount atual', valor: `${ultimo.funcionarios}` },
+    { label:'Turnover médio no período', valor: `${turnoverAno.toFixed(1)}%` },
+    { label:'Absenteísmo médio no período', valor: `${absAno.toFixed(1)}%` },
+    { label:'Horas extras (total)', valor: `${totalHE.toFixed(0)}h` },
+  ];
+  kpis.forEach((k, i)=>{
+    const x = 0.4 + (i%2)*4.7;
+    const y = 1.2 + Math.floor(i/2)*2.0;
+    slide.addShape(pptx.ShapeType.roundRect, { x, y, w:4.3, h:1.7, fill:{color:'F5F7F8'}, line:{color:'DDE4E7', width:1}, rectRadius:0.1 });
+    slide.addText(k.label, { x:x+0.25, y:y+0.15, w:3.8, h:0.4, fontSize:12, color:'6B7C89' });
+    slide.addText(k.valor, { x:x+0.25, y:y+0.55, w:3.8, h:0.8, fontSize:30, bold:true, color:corPrincipal });
+  });
+  slide.addText(`Valor pago em horas extras no período: ${totalHEValor.toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}`, { x:0.4, y:5.4, w:9, h:0.5, fontSize:13, color:'4A6278' });
+
+  const mesesLabels = agregados.map(m=>MESES_EXT[m.mes]);
+
+  // slide — turnover
+  slide = pptx.addSlide();
+  slide.addText('Turnover mensal (%)', { x:0.4, y:0.3, w:9, h:0.6, fontSize:22, bold:true, color:corSecundaria });
+  slide.addChart(pptx.ChartType.line, [{
+    name: 'Turnover %',
+    labels: mesesLabels,
+    values: agregados.map(m=>Number(avgTurnoverForMonth(lista,m.mes,ano).toFixed(1))),
+  }], { x:0.4, y:1.1, w:9, h:4.8, chartColors:[corPrincipal], showValue:true, dataLabelFontSize:9, catAxisLabelFontSize:10, valAxisLabelFontSize:10 });
+
+  // slide — absenteísmo
+  slide = pptx.addSlide();
+  slide.addText('Absenteísmo mensal (%)', { x:0.4, y:0.3, w:9, h:0.6, fontSize:22, bold:true, color:corSecundaria });
+  slide.addChart(pptx.ChartType.line, [{
+    name: 'Absenteísmo %',
+    labels: mesesLabels,
+    values: agregados.map(m=>Number(absenteismoFromAgg(m).toFixed(1))),
+  }], { x:0.4, y:1.1, w:9, h:4.8, chartColors:['C98A2E'], showValue:true, dataLabelFontSize:9, catAxisLabelFontSize:10, valAxisLabelFontSize:10 });
+
+  // slide — headcount
+  slide = pptx.addSlide();
+  slide.addText('Evolução do headcount', { x:0.4, y:0.3, w:9, h:0.6, fontSize:22, bold:true, color:corSecundaria });
+  slide.addChart(pptx.ChartType.bar, [{
+    name: 'Headcount',
+    labels: mesesLabels,
+    values: agregados.map(m=>m.funcionarios),
+  }], { x:0.4, y:1.1, w:9, h:4.8, chartColors:[corSecundaria], showValue:true, dataLabelFontSize:9, catAxisLabelFontSize:10, valAxisLabelFontSize:10 });
+
+  // slide — horas extras
+  slide = pptx.addSlide();
+  slide.addText('Horas extras — total e valor pago', { x:0.4, y:0.3, w:9, h:0.6, fontSize:22, bold:true, color:corSecundaria });
+  slide.addChart(pptx.ChartType.bar, [{
+    name: 'Horas extras (h)',
+    labels: mesesLabels,
+    values: agregados.map(m=>Number(m.horasExtras.toFixed(1))),
+  }], { x:0.4, y:1.1, w:9, h:4.8, chartColors:[corPrincipal], showValue:true, dataLabelFontSize:9, catAxisLabelFontSize:10, valAxisLabelFontSize:10 });
+
+  // slide — ranking (apenas quando o filtro cobre mais de um departamento/empresa)
+  const paresRanking = {};
+  filteredLancamentos(null, null, ano).forEach(l=>{
+    const key = l.empresaId+'|'+l.departamentoId;
+    if(!paresRanking[key]) paresRanking[key]=[];
+    paresRanking[key].push(l);
+  });
+  const rankingRows = Object.entries(paresRanking).map(([key, lancsDepto])=>{
+    lancsDepto.sort((a,b)=>a.mes-b.mes);
+    const [empId, depId] = key.split('|');
+    const d = getDepto(depId), e = getEmpresa(empId);
+    if(!d) return null;
+    const turnover = lancsDepto.reduce((s,l)=>s+turnoverMensal(l, lancsDepto),0)/lancsDepto.length;
+    const abs = lancsDepto.reduce((s,l)=>s+absenteismoMensal(l),0)/lancsDepto.length;
+    return [e?e.nome:'-', d.nome, `${turnover.toFixed(1)}%`, `${abs.toFixed(1)}%`];
+  }).filter(Boolean).sort((a,b)=>parseFloat(b[2])-parseFloat(a[2]));
+
+  if(rankingRows.length>1){
+    slide = pptx.addSlide();
+    slide.addText('Ranking por empresa e departamento', { x:0.4, y:0.3, w:9, h:0.6, fontSize:22, bold:true, color:corSecundaria });
+    const tableRows = [
+      [{text:'Empresa', options:{bold:true, fill:{color:corSecundaria}, color:'FFFFFF'}},
+       {text:'Departamento', options:{bold:true, fill:{color:corSecundaria}, color:'FFFFFF'}},
+       {text:'Turnover', options:{bold:true, fill:{color:corSecundaria}, color:'FFFFFF'}},
+       {text:'Absenteísmo', options:{bold:true, fill:{color:corSecundaria}, color:'FFFFFF'}}],
+      ...rankingRows.map(r=>r.map(v=>({text:String(v)})))
+    ];
+    slide.addTable(tableRows, { x:0.4, y:1.1, w:9, h:4.8, fontSize:11, border:{type:'solid', color:'DDE4E7', pt:1} });
+  }
+
+  const nomeArquivo = `indicadores-rh-${(empresa?empresa.nome:'todas').replace(/\s+/g,'-').toLowerCase()}-${anoTitulo}.pptx`;
+  pptx.writeFile({ fileName: nomeArquivo });
 }
 
 /* ============ BACKUP / GOOGLE DRIVE ============ */
