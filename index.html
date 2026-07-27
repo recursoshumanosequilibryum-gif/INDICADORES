@@ -1188,14 +1188,25 @@ function exportIndicadoresPptx(){
     values: agregados.map(m=>m.funcionarios),
   }], { x:0.4, y:1.1, w:9, h:4.8, chartColors:[corSecundaria], showValue:true, dataLabelFontSize:9, catAxisLabelFontSize:10, valAxisLabelFontSize:10 });
 
-  // slide — horas extras
+  // slide — horas extras (gráfico de horas + tabela com valor pago mês a mês)
   slide = pptx.addSlide();
   slide.addText('Horas extras — total e valor pago', { x:0.4, y:0.3, w:9, h:0.6, fontSize:22, bold:true, color:corSecundaria });
   slide.addChart(pptx.ChartType.bar, [{
     name: 'Horas extras (h)',
     labels: mesesLabels,
     values: agregados.map(m=>Number(m.horasExtras.toFixed(1))),
-  }], { x:0.4, y:1.1, w:9, h:4.8, chartColors:[corPrincipal], showValue:true, dataLabelFontSize:9, catAxisLabelFontSize:10, valAxisLabelFontSize:10 });
+  }], { x:0.4, y:1.0, w:9, h:2.9, chartColors:[corPrincipal], showValue:true, dataLabelFontSize:9, catAxisLabelFontSize:9, valAxisLabelFontSize:9 });
+  const heTableRows = [
+    [{text:'Mês', options:{bold:true, fill:{color:corSecundaria}, color:'FFFFFF'}},
+     {text:'Horas extras', options:{bold:true, fill:{color:corSecundaria}, color:'FFFFFF'}},
+     {text:'Valor pago', options:{bold:true, fill:{color:corSecundaria}, color:'FFFFFF'}}],
+    ...agregados.map(m=>[
+      {text: MESES_EXT[m.mes]},
+      {text: `${m.horasExtras.toFixed(1)}h`},
+      {text: (m.horasExtrasValor||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})},
+    ]),
+  ];
+  slide.addTable(heTableRows, { x:0.4, y:4.1, w:9, h:2.5, fontSize:11, border:{type:'solid', color:'DDE4E7', pt:1} });
 
   // slide — ranking (apenas quando o filtro cobre mais de um departamento/empresa)
   const paresRanking = {};
